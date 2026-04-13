@@ -1,0 +1,11 @@
+APP_PORT=3000
+
+DATABASE_URL=postgresql://user:password@localhost:5432/topup
+
+JWT_SECRET=supersecretkey
+JWT_EXPIRES_IN=15m
+
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+OPENAI_API_KEY=your_key_here
