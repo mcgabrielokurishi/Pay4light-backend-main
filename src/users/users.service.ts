@@ -15,7 +15,7 @@ export class UsersService {
         email: true,
         phone: true,
         fullName: true,
-        Meter: true,
+        meters: true,
         firstName: true,
         lastName: true,
         createdAt: true,

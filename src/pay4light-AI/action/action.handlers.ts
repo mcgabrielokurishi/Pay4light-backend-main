@@ -45,7 +45,7 @@ export class ActionHandlers {
         userId,
         "IKEDC", // ideally store disco in transaction metadata
         "1234567890",
-        failedTransaction.amount.toNumber()
+        failedTransaction.amount
       );
 
       return {

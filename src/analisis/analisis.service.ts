@@ -32,10 +32,10 @@ async getConsumptionHistory(userId: string, month: number, year: number) {
 
   // Calculate totals
   const totalKwh  = currentTxns.reduce((sum, tx) => sum + Number((tx.metadata as any)?.kwh ?? 0), 0);
-  const totalCost = currentTxns.reduce((sum, tx) => sum + tx.amount.toNumber(), 0);
+  const totalCost = currentTxns.reduce((sum, tx) => sum + tx.amount, 0);
 
   const lastKwh   = lastTxns.reduce((sum, tx) => sum + Number((tx.metadata as any)?.kwh ?? 0), 0);
-  const lastCost  = lastTxns.reduce((sum, tx) => sum + tx.amount.toNumber(), 0);
+  const lastCost  = lastTxns.reduce((sum, tx) => sum + tx.amount, 0);
 
   // Compare
   const usagePercent = lastKwh  ? ((totalKwh  - lastKwh)  / lastKwh)  * 100 : 0;
@@ -53,7 +53,7 @@ async getConsumptionHistory(userId: string, month: number, year: number) {
     return {
       week: `W${w}`,
       kwh:  weekTxns.reduce((sum, tx) => sum + Number((tx.metadata as any)?.kwh ?? 0), 0),
-      cost: weekTxns.reduce((sum, tx) => sum + tx.amount.toNumber(), 0),
+      cost: weekTxns.reduce((sum, tx) => sum + tx.amount, 0),
     };
   });
 

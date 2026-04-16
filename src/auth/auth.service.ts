@@ -12,7 +12,7 @@ import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { OtpService } from "./OTP/otp.service";
-import { OtpPurpose } from "@prisma/client";
+import { OtpPurpose } from "./OTP/dto/send-otp.dto";
 
 @Injectable()
 export class AuthService {
@@ -70,6 +70,8 @@ export class AuthService {
       phone,
       purpose: OtpPurpose.REGISTER,
     });
+
+    console.log("otp", this.otpService.sendOtp)
 
     return {
       message: "OTP sent to your email/phone. Please verify to complete registration.",
@@ -156,7 +158,7 @@ export class AuthService {
       throw new UnauthorizedException("Please verify your account first");
     }
 
-    if (user.lockedUntill && user.lockedUntill > new Date()) {
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
       throw new ForbiddenException("Account locked. Try again later.");
     }
 
@@ -168,7 +170,7 @@ export class AuthService {
 
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { failedAttempts: 0, lockedUntill: null },
+      data: { failedAttempts: 0, lockedUntil: null },
     });
 
     return this.generateTokens(user.id, user.email ?? user.phone!);
@@ -223,7 +225,7 @@ export class AuthService {
       where: { id: userId },
       data: {
         failedAttempts: newAttempts,
-        lockedUntill: newAttempts >= this.MAX_FAILED_ATTEMPTS
+        lockedUntil: newAttempts >= this.MAX_FAILED_ATTEMPTS
           ? new Date(Date.now() + this.LOCK_TIME_MINUTES * 60 * 1000)
           : undefined,
       },

@@ -20,7 +20,7 @@ export class PaymentsService {
         status: "PENDING",
         reference,
         type: dto.type ?? "PAYMENT", // required by Prisma TransactionUncheckedCreateInput
-        metadata: { email: dto.email },
+        metadata: JSON.stringify({ email: dto.email }),
       },
     });
 
@@ -41,7 +41,7 @@ export class PaymentsService {
     );
 
     return {
-      paymentUrl: response.data.data.authorization_url,
+      paymentUrl: (response.data as any).data.authorization_url,
       reference,
     };
   }

@@ -7,53 +7,6 @@ datasource db {
   url      = "file:./dev.db"
 }
 
-enum TransactionType {
-ELECTRICITY_PURCHASE
-  WALLET_CREDIT
-  WALLET_DEBIT
-}
-
-enum LedgerType {
-  CREDIT
-  DEBIT
-}
-
-enum TransactionStatus {
-  PENDING
-  SUCCESS
-  FAILED
-}
-
-enum MeterType {
-  PREPAID
-  POSTPAID
-}
-
-enum VendorStatus {
-  PENDING
-  SUCCESS
-  FAILED
-  REVERSED
-}
-
-enum UtilityStatus {
-  PENDING
-  SUCCESS
-  FAILED
-}
-
-enum Role {
-  USER
-  ADMIN
-}
-
-enum OtpPurpose {
-  REGISTER
-  LOGIN
-  PASSWORD_RESET
-  FUND_WALLET
-}
-
 model Device {
   id          String   @id @default(uuid())
   userId      String
@@ -70,34 +23,34 @@ model Device {
 }
 
 model VendorTransaction {
-  id              String       @id @default(uuid())
+  id              String   @id @default(uuid())
   userId          String
-  reference       String       @unique
+  reference       String   @unique
   provider        String
   serviceType     String
   token           String?
   meterID         String?
   units           String?
-  amount          Decimal      @default(0)
-  status          VendorStatus
-  requestPayload  Json
-  responsePayload Json?
+  amount          Float    @default(0)
+  status          String
+  requestPayload  String
+  responsePayload String?
   externalRef     String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model OTP {
-  id        String     @id @default(uuid())
+  id        String   @id @default(uuid())
   userId    String?
   phone     String?
   email     String?
   codeHash  String
-  purpose   OtpPurpose
+  purpose   String
   expiresAt DateTime
-  attempts  Int        @default(0)
-  verified  Boolean    @default(false)
-  createdAt DateTime   @default(now())
+  attempts  Int      @default(0)
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
 
   user User? @relation(fields: [userId], references: [id])
 }
@@ -107,14 +60,14 @@ model User {
   email    String? @unique
   phone    String? @unique
   password String
-  role     Role    @default(USER)
+  role     String  @default("USER")
 
   firstName      String?
   lastName       String?
   fullName       String?
   failedAttempts Int       @default(0)
-  lockedUntill   DateTime?
-  discoId      String? 
+  lockedUntil    DateTime?
+  discoId        String?
   isVerified     Boolean   @default(false)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -126,24 +79,26 @@ model User {
   conversations        AIConversation[]
   otps                 OTP[]
   devices              Device[]
-  Meter                Meter[]
+  meters               Meter[]
+
   disco Disco? @relation(fields: [discoId], references: [id])
 }
 
 model LedgerEntry {
-  id            String            @id @default(uuid())
+  id            String   @id @default(uuid())
   walletId      String
   accountId     String
   transactionId String
   type          String
-  amount        Decimal           @default(0)
-  balanceBefore Decimal           @default(0)
-  balanceAfter  Decimal           @default(0)
+  amount        Float    @default(0)
+  balanceBefore Float    @default(0)
+  balanceAfter  Float    @default(0)
   description   String?
-  metadata      Json?
-  transaction   LedgerTransaction @relation(fields: [transactionId], references: [id])
-  account       LedgerAccount     @relation(fields: [accountId], references: [id])
-  wallet        Wallet            @relation(fields: [walletId], references: [id])
+  metadata      String?
+
+  transaction LedgerTransaction @relation(fields: [transactionId], references: [id])
+  account     LedgerAccount     @relation(fields: [accountId], references: [id])
+  wallet      Wallet            @relation(fields: [walletId], references: [id])
 
   createdAt DateTime @default(now())
 }
@@ -165,11 +120,11 @@ model LedgerAccount {
   id        String  @id @default(uuid())
   name      String
   accountId String
-  type      String // USER, SYSTEM, VENDOR
-  userId    String? // if user wallet
-  balance   Decimal @default(0)
+  type      String
+  userId    String?
+  balance   Float   @default(0)
 
-  createdAt DateTime      @default(now())
+  createdAt DateTime @default(now())
   entries   LedgerEntry[]
 }
 
@@ -178,46 +133,51 @@ model LedgerTransaction {
   reference     String  @unique
   description   String?
   walletId      String
-  transactionId Json
-  status        String // PENDING, SUCCESS, FAILED
+  transactionId String
+  status        String
 
   entries   LedgerEntry[]
-  createdAt DateTime      @default(now())
+  createdAt DateTime @default(now())
 }
 
 model Wallet {
   id       String  @id @default(uuid())
   userId   String  @unique
-  amount   Decimal @default(0)
-  balance  Decimal @default(0)
+  amount   Float   @default(0)
+  balance  Float   @default(0)
   currency String  @default("NGN")
   locked   Boolean @default(false)
 
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  entries   LedgerEntry[]
+  virtualAccountNuban String?
+  virtual_account_bank String?
+  virtual_account_ref  String?
 
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries      LedgerEntry[]
   transactions Transaction[]
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Transaction {
-  id          String            @id @default(uuid())
+  id          String  @id @default(uuid())
   userId      String
   walletId    String
-  meterId     String
-  metadata    Json
-  type        TransactionType
+  meterId     String?
+  metadata    String
+  type        String
   token       String?
-  amount      Decimal
+  amount      Float
   kwh         Float?
-  reference   String            @unique
-  status      TransactionStatus @default(PENDING)
+  reference   String  @unique
+  status      String  @default("PENDING")
   description String?
 
   createdAt DateTime @default(now())
 
-  meter Meter @relation(fields: [meterId], references: [id])
+  meter Meter? @relation(fields: [meterId], references: [id])
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
@@ -231,11 +191,11 @@ model ElectricityPurchase {
 
   disco       String
   meterNumber String
-  meterType   MeterType
+  meterType   String
 
-  units  Decimal?
+  units  Float?
   token  String?
-  status UtilityStatus @default(PENDING)
+  status String @default("PENDING")
 
   createdAt DateTime @default(now())
 
@@ -246,7 +206,7 @@ model ElectricityPurchase {
 model AIConversation {
   id        String   @id @default(uuid())
   userId    String
-  role      String // "user" | "assistant"
+  role      String
   message   String
   createdAt DateTime @default(now())
 
@@ -254,34 +214,33 @@ model AIConversation {
 }
 
 model Meter {
- id          String   @id @default(cuid())
+  id          String   @id @default(cuid())
   userId      String
   meterNumber String   @unique
-  meterType   MeterType
+  meterType   String
   discoId     String
   address     String?
+  meterName   String?
   isDefault   Boolean  @default(false)
   createdAt   DateTime @default(now())
-  
 
-  user User @relation(fields: [userId], references: [id])
-  disco        Disco         @relation(fields: [discoId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+  disco Disco @relation(fields: [discoId], references: [id])
+
   transactions Transaction[]
 }
 
-
 model Disco {
   id           String  @id @default(cuid())
-  name         String  // e.g "Ikeja Electric"
-  code         String  @unique // e.g "IKEDC"
-  tariffRate   Float   // naira per kWh
+  name         String
+  code         String  @unique
+  tariffRate   Float
   supportPhone String?
   states       String
   supportEmail String?
   website      String?
   isActive     Boolean @default(true)
-  
-  
+
   meters Meter[]
   users  User[]
 }

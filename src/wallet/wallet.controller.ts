@@ -22,13 +22,13 @@ export class WalletController {
 
   // GET WALLET
   @Get()
-  async getWallet(@Req() req: AuthenticatedRequest) {
-    return this.walletService.getWallet(req.user.userId);
+  async getWallet(@Req() req: any) {
+    return this.walletService.getWallet(req.user.id);
   }
 
 @Post("credit")
   async credit(
-    @Req() req: AuthenticatedRequest,
+    @Req() req: any,
     @Body() dto: CreditWalletDto
   ) {
     const { amount } = dto;
@@ -40,7 +40,7 @@ export class WalletController {
 
     const decimalAmount = new Prisma.Decimal(amount.toString());
 
-    return this.walletService.credit(req.user.userId, decimalAmount);
+    return this.walletService.credit(req.user.id, decimalAmount);
   }
 
   // DEBIT WALLET

@@ -1,9 +1,9 @@
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
-import axios, { AxiosInstance } from "axios";
+import axios from "axios";
 
 @Injectable()
 export class VendorAdapter {
-  private readonly http: AxiosInstance;
+  private readonly http: any;
 
   constructor() {
     this.http = axios.create({

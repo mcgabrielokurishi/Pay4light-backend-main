@@ -198,7 +198,7 @@ export class AiService {
   ) {
     const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
 
-    if (!wallet || wallet.balance.toNumber() < amount) {
+    if (!wallet || wallet.balance < amount) {
       return { success: false, error: 'Insufficient wallet balance' };
     }
 

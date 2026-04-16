@@ -1,6 +1,12 @@
-import { IsOptional, IsPhoneNumber, IsEmail, IsEnum } from "class-validator";
-import { OtpPurpose } from "@prisma/client";
+import { IsOptional, IsPhoneNumber, IsEmail, IsEnum, IsString } from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
+
+export enum OtpPurpose {
+  REGISTER = 'REGISTER',
+  LOGIN = 'LOGIN',
+  RESET_PASSWORD = 'RESET_PASSWORD',
+  VERIFY_EMAIL = 'VERIFY_EMAIL',
+}
 
 export class SendOtpDto {
   @ApiProperty({ required: false, example: "+2347012345678" })

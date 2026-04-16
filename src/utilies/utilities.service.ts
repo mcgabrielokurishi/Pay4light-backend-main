@@ -2,9 +2,7 @@ import { Injectable, BadRequestException } from "@nestjs/common";
 import { PrismaService } from "database/prisma.service";
 import { WalletService } from "../wallet/wallet.service";
 import { MockElectricityProvider } from "./providers/mock-electricity.provider";
-import { Decimal } from "@prisma/client/runtime/library";
 import { randomUUID } from "crypto";
-import { Prisma, TransactionType } from "@prisma/client";
 
 @Injectable()
 export class UtilitiesService {
@@ -30,7 +28,7 @@ export class UtilitiesService {
         where: { userId },
       });
 
-      if (!wallet || wallet.balance.lt(amount)) {
+      if (!wallet || wallet.balance < amount) {
         throw new BadRequestException("Insufficient balance");
       }
 
@@ -40,18 +38,16 @@ export class UtilitiesService {
         data: { balance: { decrement: amount } },
       });
 
-      const decimalAmount= new Prisma.Decimal(amount);
-      
       const transaction = await tx.transaction.create({
         data: {
           userId,
           walletId: wallet.id,
-          type: TransactionType.ELECTRICITY_PURCHASE,
-          amount:decimalAmount,
+          type: "ELECTRICITY_PURCHASE",
+          amount,
           status: "PENDING",
-          reference:randomUUID(),
+          reference: randomUUID(),
           meterId: "",
-          metadata :{},
+          metadata: "{}",
           description: "Electricity purchase",
         },
       });

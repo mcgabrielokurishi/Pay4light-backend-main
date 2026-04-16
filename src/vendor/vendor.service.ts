@@ -25,7 +25,7 @@ export class VendorService {
       provider: "STRONPOWER",
       serviceType: "ELECTRICITY",   
       meterID: dto.meterId,  
-      amount,
+      amount: Number(amount),
       status: "PENDING",
       requestPayload: JSON.parse(JSON.stringify(dto)),
     },
@@ -52,7 +52,7 @@ export class VendorService {
         }
       );
 
-      const data = response.data;
+      const data = response.data as any;
 
       // You must adjust based on actual response structure
       if (!data || data.Status !== "SUCCESS") {

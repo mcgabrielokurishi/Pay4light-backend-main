@@ -1,9 +1,13 @@
 
 import { Injectable } from "@nestjs/common";
-import { MeterType } from "@prisma/client";
 import { PrismaService } from "database/prisma.service";
 import { NotFoundException } from "@nestjs/common";
 import { CreateMeterDto } from "./dto/create-meter.dto";
+
+enum MeterType {
+  PREPAID = 'PREPAID',
+  POSTPAID = 'POSTPAID',
+}
 
 @Injectable()
 export class MeterService {
@@ -37,7 +41,7 @@ async createMeter(userId: string, dto: CreateMeterDto) {
         connect: { id: userId },
       },
       disco: {
-        connect: { id: dto.discoCode.toUpperCase() },
+        connect: { id: disco.id },
       },
     },
   });

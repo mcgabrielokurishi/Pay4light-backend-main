@@ -11,6 +11,7 @@ import { WebhookModule } from "./webhooks/webhooks.module";
 import { TransactionsModule } from "./transaction/transactions.module";
 import { analisismodule } from "./analisis/analisis.module";
 import { DiscoModule } from "./disco/disco.module";
+import { BuypowerModule } from "./buypower/buypower.module";
 @Module({
   imports: [
     PrismaModule,
@@ -19,6 +20,7 @@ import { DiscoModule } from "./disco/disco.module";
     TransactionsModule,
     UsersModule,
     PaymentModule,
+    BuypowerModule,
     ElectricityAIModule,
     VendorModule,
     MeterModule,

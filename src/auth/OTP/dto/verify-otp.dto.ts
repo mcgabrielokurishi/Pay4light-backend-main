@@ -1,5 +1,5 @@
 import { IsString, IsEnum } from "class-validator";
-import { OtpPurpose } from "@prisma/client";
+import { OtpPurpose } from "./send-otp.dto";
 
 export class VerifyOtpDto {
   @IsString()
