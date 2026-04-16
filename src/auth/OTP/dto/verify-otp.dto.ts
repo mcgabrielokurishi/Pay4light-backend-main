@@ -16,4 +16,12 @@ export class VerifyOtpDto {
   })
   @IsString()
   code: string;
+
+
+  @ApiProperty({
+    description: "purpose for otp",
+    example: "  REGISTER",
+  })
+  @IsString()
+  purpose: string;
 }
