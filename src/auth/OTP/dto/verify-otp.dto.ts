@@ -22,5 +22,5 @@ export class VerifyOtpDto {
     example: "REGISTER",
   })
   @IsString()
-  purpose: OtpPurpose; // <-- you need this line
+  purpose: string; // <-- you need this line
 }
