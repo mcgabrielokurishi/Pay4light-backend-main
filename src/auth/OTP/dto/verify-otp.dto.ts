@@ -17,11 +17,10 @@ export class VerifyOtpDto {
   @IsString()
   code: string;
 
-
   @ApiProperty({
-    description: "purpose for otp",
-    example: "  REGISTER",
+    description: "Purpose for OTP",
+    example: "REGISTER",
   })
   @IsString()
-  purpose: string;
+  purpose: OtpPurpose; // <-- you need this line
 }
