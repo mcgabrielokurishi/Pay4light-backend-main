@@ -9,4 +9,4 @@ import { TransactionsModule } from "../transaction/transactions.module";
   controllers: [ConsumptionController],
   exports: [analisismodule],
 })
-export class analisismodule {}
+export class analisismodule{}

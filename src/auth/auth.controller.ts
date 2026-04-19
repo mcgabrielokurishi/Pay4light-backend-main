@@ -33,9 +33,7 @@ export class AuthController {
   // VERIFY OTP AND COMPLETE REGISTRATION
   @Post("register/verify-otp")
   @HttpCode(HttpStatus.OK)
-  async verifyOtpAndRegister(
-    @Body() dto: { identifier: string; code: string; password: string }
-  ) {
+  async verifyOtpAndRegister(@Body() dto: VerifyOtpDto ) {
     // Verify the OTP
     await this.otpService.verifyOtp({
       identifier: dto.identifier,
@@ -46,7 +44,6 @@ export class AuthController {
     // Complete registration and return tokens
     return this.authService.completeRegistration(dto.identifier);
   }
-
   
   // LOGIN
   
