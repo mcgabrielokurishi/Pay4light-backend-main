@@ -13,6 +13,9 @@ import { RefreshDto } from "./dto/refresh.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { OtpService } from "./OTP/otp.service";
 import { OtpPurpose } from "./OTP/dto/send-otp.dto";
+import { hashOTP } from "./OTP/otp.util";
+import { ForgotPasswordDto } from "./dto/forgotten-password.dto";
+import { ResetPasswordDto } from "./dto/reset-password.dto";
 
 @Injectable()
 export class AuthService {
@@ -117,7 +120,7 @@ export class AuthService {
       where: { OR: [{ email: identifier }, { phone: identifier }] },
     });
     if (existingUser) throw new ConflictException("User already exists");
-
+ 
     // NOW create the user + wallet in DB
     const newUser = await this.prisma.$transaction(async (db) => {
       const createdUser = await db.user.create({
@@ -136,7 +139,7 @@ export class AuthService {
 
       return createdUser;
     });
- 
+  
     //  Clean up pending registration from memory
     this.pendingRegistrations.delete(identifier);
 
@@ -175,6 +178,101 @@ export class AuthService {
 
     return this.generateTokens(user.id, user.email ?? user.phone!);
   }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+  const { email } = dto;
+
+  // Check user exists
+  const user = await this.prisma.user.findFirst({
+    where: { email },
+  });
+
+  // Always return same message — prevents email enumeration attacks
+  if (!user) {
+    return {
+      message: 'If an account with that email exists, an OTP has been sent.',
+    };
+  }
+
+  if (!user.isVerified) {
+    throw new BadRequestException('Account not verified. Please verify your account first.');
+  }
+
+  // Send OTP
+  await this.otpService.sendOtp({
+    email,
+    purpose: OtpPurpose.RESET_PASSWORD,
+  });
+
+  return {
+    message: 'If an account with that email exists, an OTP has been sent.',
+    identifier: email,
+  };
+}
+
+// RESET PASSWORD 
+async resetPassword(dto: ResetPasswordDto) {
+  const { email, otp, newPassword } = dto;
+
+  // Find user
+  const user = await this.prisma.user.findFirst({
+    where: { email },
+  });
+
+  if (!user) {
+    throw new BadRequestException('Invalid request');
+  }
+
+  // Verify OTP
+  const otpRecord = await this.prisma.oTP.findFirst({
+    where: {
+      OR: [{ email }, { phone: email }],
+      purpose: OtpPurpose.RESET_PASSWORD,
+      verified: false,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!otpRecord) {
+    throw new BadRequestException('Invalid or expired OTP');
+  }
+
+  const isValidOtp = hashOTP(otp) === otpRecord.codeHash;
+  if (!isValidOtp) {
+    throw new BadRequestException('Invalid or expired OTP');
+  }
+
+  // Check new password is not same as old
+  const isSamePassword = await bcrypt.compare(newPassword, user.password);
+  if (isSamePassword) {
+    throw new BadRequestException('New password cannot be the same as your current password');
+  }
+
+  // Hash new password
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+  // Update password + mark OTP as verified
+  await this.prisma.$transaction([
+    this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        failedAttempts: 0,      
+        lockedUntil: null,     
+      },
+    }),
+    this.prisma.oTP.update({
+      where: { id: otpRecord.id },
+      data: { verified: true },
+    }),
+  ]);
+
+  return {
+    message: 'Password reset successfully. Please log in with your new password.',
+  };
+}
+
 
   // REFRESH
   async refresh(dto: RefreshDto) {

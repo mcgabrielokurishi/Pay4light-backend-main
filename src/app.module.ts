@@ -9,7 +9,7 @@ import { MeterModule } from "./meter/meter.module";
 import { PaymentModule } from "./payments/payments.module";
 import { WebhookModule } from "./webhooks/webhooks.module";
 import { TransactionsModule } from "./transaction/transactions.module";
-import { analisismodule } from "./analisis/analisis.module";
+import { AnalisisModule } from "./analisis/analisis.module";
 import { DiscoModule } from "./disco/disco.module";
 import { BuypowerModule } from "./buypower/buypower.module";
 @Module({
@@ -24,7 +24,7 @@ import { BuypowerModule } from "./buypower/buypower.module";
     ElectricityAIModule,
     VendorModule,
     MeterModule,
-    analisismodule,
+    AnalisisModule,
     WebhookModule,
     DiscoModule
   ],

@@ -7,6 +7,6 @@ import { TransactionsModule } from "../transaction/transactions.module";
   imports: [TransactionsModule],
   providers: [AnalyticsService],
   controllers: [ConsumptionController],
-  exports: [analisismodule],
+  exports: [AnalisisModule], 
 })
-export class analisismodule{}
+export class AnalisisModule {} 
