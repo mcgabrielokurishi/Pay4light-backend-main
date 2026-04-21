@@ -7,48 +7,45 @@ import {
 import { PrismaService } from 'database/prisma.service';
 import { QueryDiscoDto } from './dto/get-disco';
 import { DiscoDto } from './dto/dto.disco';
-import { JwtStrategy } from 'src/auth/jwt.strategy';
 
 @Injectable()
 export class DiscoService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async selectUserDisco(userId:string, dto: DiscoDto) {
+  // SELECT USER DISCO
+  async selectUserDisco(userId: string, dto: DiscoDto) {
+    const disco = await this.prisma.disco.findUnique({
+      where: { code: dto.discoCode.toUpperCase() },
+    });
 
-  if (!userId) {
-    throw new BadRequestException('User ID is missing. Please log in again.');
+    if (!disco) {
+      throw new NotFoundException(`DISCO "${dto.discoCode}" not found`);
+    }
+
+    if (!disco.isActive) {
+      throw new BadRequestException(
+        `DISCO "${disco.name}" is currently unavailable`,
+      );
+    }
+
+    //  Save discoId to user — now works since schema is updated
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { discoId: disco.id },
+    });
+
+    // Return disco separately — no more 'never' error
+    return {
+      discoId: disco.id,
+      disco: {
+        name: disco.name,
+        code: disco.code,
+        tariffRate: disco.tariffRate,
+        supportPhone: disco.supportPhone,
+        states: disco.states,
+      },
+    };
   }
-
-  const disco = await this.prisma.disco.findUnique({
-    where: { code: dto.discoCode.toUpperCase() },
-  });
-
-  if (!disco) {
-    throw new NotFoundException(`DISCO "${dto.discoCode}" not found`);
-  }
-
-  if (!disco.isActive) {
-    throw new BadRequestException(
-      `DISCO "${disco.name}" is currently unavailable`,
-    );
-  }
-
-  await this.prisma.user.update({
-    where: { id: userId },
-    data: { discoId: disco.id },
-  });
-
-  return {
-    discoId: disco.id,
-    disco: {
-      name: disco.name,
-      code: disco.code,
-      tariffRate: disco.tariffRate,
-      supportPhone: disco.supportPhone,
-      states: disco.states,
-    },
-  };
-}
 
   // GET ALL DISCOs
   async getAllDiscos(query: QueryDiscoDto) {
@@ -57,7 +54,7 @@ export class DiscoService {
     const discos = await this.prisma.disco.findMany({
       where: {
         isActive: isActive !== undefined ? isActive : true,
-        
+        // ✅ Fix: removed mode: 'insensitive' — use contains only
         ...(state ? { states: { contains: state } } : {}),
         ...(search
           ? {
@@ -100,7 +97,7 @@ export class DiscoService {
 
   // GET DISCOs BY STATE
   async getDiscosByState(state: string) {
- 
+    // Fix: removed mode: 'insensitive'
     const discos = await this.prisma.disco.findMany({
       where: {
         isActive: true,

@@ -38,7 +38,7 @@ export class AuthService {
     private otpService: OtpService,
   ) {}
 
-  // STEP 1 — REGISTER (just send OTP, save nothing to DB)
+  // REGISTER (just send OTP, save nothing to DB)
   async register(dto: RegisterDto) {
     if (!dto) throw new BadRequestException("Request body is missing");
 

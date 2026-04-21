@@ -10,7 +10,7 @@ export class UsersController {
 
   @Get("userprofile")
   getProfile(@Req() req) {
-    return this.usersService.getMe(req.user.userId);
+    return this.usersService.getMe(req.user.id);
   }
 
   @Patch("updateprofile")
