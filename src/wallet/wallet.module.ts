@@ -9,6 +9,6 @@ import { BuypowerModule } from "../buypower/buypower.module";
   imports: [PrismaModule, AuthModule, BuypowerModule],
   controllers: [WalletController],
   providers: [WalletService],
-  exports:[WalletService]
+  exports: [WalletService],
 })
 export class WalletModule {}

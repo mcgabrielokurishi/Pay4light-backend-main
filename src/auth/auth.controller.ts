@@ -14,6 +14,7 @@ import { ForgotPasswordDto } from "./dto/forgotten-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { VerifyOtpDto } from "./OTP/dto/verify-otp.dto";
+import { VerifyForgotPasswordDto } from "./dto/verify-forgot-password.dto";
 
 @ApiTags('Auth')
 @Controller("auth")
@@ -66,10 +67,18 @@ async forgotPassword(@Body() dto: ForgotPasswordDto) {
   return this.authService.forgotPassword(dto);
 }
 
-// RESET PASSWORD
+// STEP 2
+@Post('verify-forgot-password')
+@HttpCode(HttpStatus.OK)
+async verifyForgotPassword(@Body() dto: VerifyForgotPasswordDto) {
+  return this.authService.verifyForgotPasswordOtp(dto);
+}
+
+// STEP 3
 @Post('reset-password')
 @HttpCode(HttpStatus.OK)
 async resetPassword(@Body() dto: ResetPasswordDto) {
   return this.authService.resetPassword(dto);
 }
+
 }

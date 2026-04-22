@@ -15,20 +15,28 @@ import { OtpService } from "./OTP/otp.service";
 import { OtpPurpose } from "./OTP/dto/send-otp.dto";
 import { hashOTP } from "./OTP/otp.util";
 import { ForgotPasswordDto } from "./dto/forgotten-password.dto";
+import { VerifyForgotPasswordDto } from "./dto/verify-forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { randomUUID } from "crypto";
 
 @Injectable()
 export class AuthService {
   private MAX_FAILED_ATTEMPTS = 5;
   private LOCK_TIME_MINUTES = 15;
 
-  //  Temporary in-memory store for pending registrations
-  // Holds user data between register() and completeRegistration()
+  // Temporary in-memory store for pending registrations
   private pendingRegistrations = new Map<string, {
     fullName: string;
     email?: string;
     phone?: string;
     hashedPassword: string;
+    expiresAt: Date;
+  }>();
+
+  // Temporary in-memory store for verified reset tokens
+  private resetTokens = new Map<string, {
+    userId: string;
+    email: string;
     expiresAt: Date;
   }>();
 
@@ -38,7 +46,8 @@ export class AuthService {
     private otpService: OtpService,
   ) {}
 
-  // REGISTER (just send OTP, save nothing to DB)
+  // ─── REGISTER ───────────────────────────────────────────────────
+
   async register(dto: RegisterDto) {
     if (!dto) throw new BadRequestException("Request body is missing");
 
@@ -48,33 +57,27 @@ export class AuthService {
       throw new BadRequestException("Email or phone is required");
     }
 
-    // Check if user already exists in DB
     const existingUser = await this.prisma.user.findFirst({
       where: { OR: [{ email }, { phone }] },
     });
     if (existingUser) throw new ConflictException("User already exists");
 
-    //  Hash password but DO NOT save user to DB yet
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    //  Store temporarily in memory with 10 minute expiry
     const identifier = email || phone!;
     this.pendingRegistrations.set(identifier, {
       fullName,
       email,
       phone,
       hashedPassword,
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     });
 
-    // Send OTP
     await this.otpService.sendOtp({
       email,
       phone,
       purpose: OtpPurpose.REGISTER,
     });
-
-    console.log("otp", this.otpService.sendOtp)
 
     return {
       message: "OTP sent to your email/phone. Please verify to complete registration.",
@@ -82,9 +85,9 @@ export class AuthService {
     };
   }
 
-  // COMPLETE REGISTRATION (only NOW save user to DB)
+  // COMPLETE REGISTRATION 
+
   async completeRegistration(identifier: string) {
-    //  Check OTP was verified first
     const otpRecord = await this.prisma.oTP.findFirst({
       where: {
         OR: [{ email: identifier }, { phone: identifier }],
@@ -98,7 +101,6 @@ export class AuthService {
       throw new UnauthorizedException("OTP not verified. Please verify OTP first.");
     }
 
-    //  Retrieve pending registration data from memory
     const pending = this.pendingRegistrations.get(identifier);
 
     if (!pending) {
@@ -107,7 +109,6 @@ export class AuthService {
       );
     }
 
-    // Check if session has expired (10 minutes)
     if (pending.expiresAt < new Date()) {
       this.pendingRegistrations.delete(identifier);
       throw new BadRequestException(
@@ -115,13 +116,11 @@ export class AuthService {
       );
     }
 
-    //  Double check user still doesn't exist
     const existingUser = await this.prisma.user.findFirst({
       where: { OR: [{ email: identifier }, { phone: identifier }] },
     });
     if (existingUser) throw new ConflictException("User already exists");
- 
-    // NOW create the user + wallet in DB
+
     const newUser = await this.prisma.$transaction(async (db) => {
       const createdUser = await db.user.create({
         data: {
@@ -129,7 +128,7 @@ export class AuthService {
           email: pending.email,
           phone: pending.phone,
           password: pending.hashedPassword,
-          isVerified: true, //  already verified via OTP
+          isVerified: true,
         },
       });
 
@@ -139,15 +138,14 @@ export class AuthService {
 
       return createdUser;
     });
-  
-    //  Clean up pending registration from memory
+
     this.pendingRegistrations.delete(identifier);
 
-    // Return tokens
     return this.generateTokens(newUser.id, newUser.email ?? newUser.phone!);
   }
 
-  // LOGIN
+  // ─── LOGIN 
+
   async login(dto: LoginDto) {
     const { identifier, password } = dto;
 
@@ -179,102 +177,145 @@ export class AuthService {
     return this.generateTokens(user.id, user.email ?? user.phone!);
   }
 
+  // ─── FORGOT PASSWORD 
+
   async forgotPassword(dto: ForgotPasswordDto) {
-  const { email } = dto;
+    const { email } = dto;
 
-  // Check user exists
-  const user = await this.prisma.user.findFirst({
-    where: { email },
-  });
+    const user = await this.prisma.user.findFirst({ where: { email } });
 
-  // Always return same message — prevents email enumeration attacks
-  if (!user) {
+    // Always return same message — prevents email enumeration attacks
+    if (!user) {
+      return {
+        message: 'If an account with that email exists, an OTP has been sent.',
+      };
+    }
+
+    if (!user.isVerified) {
+      throw new BadRequestException(
+        'Account not verified. Please verify your account first.',
+      );
+    }
+
+    await this.otpService.sendOtp({
+      email,
+      purpose: OtpPurpose.RESET_PASSWORD,
+    });
+
     return {
-      message: 'If an account with that email exists, an OTP has been sent.',
+      message: 'OTP sent to your email.',
+      identifier: email,
     };
   }
 
-  if (!user.isVerified) {
-    throw new BadRequestException('Account not verified. Please verify your account first.');
+  // ─── VERIFY FORGOT PASSWORD 
+
+  async verifyForgotPasswordOtp(dto: VerifyForgotPasswordDto) {
+    const { email, otp } = dto;
+
+    const user = await this.prisma.user.findFirst({ where: { email } });
+    if (!user) throw new BadRequestException('Invalid request');
+
+    // Find OTP record
+    const otpRecord = await this.prisma.oTP.findFirst({
+      where: {
+        OR: [{ email }, { phone: email }],
+        purpose: OtpPurpose.RESET_PASSWORD,
+        verified: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!otpRecord) {
+      throw new BadRequestException('Invalid or expired OTP');
+    }
+
+    // Validate OTP code
+    const isValidOtp = hashOTP(otp) === otpRecord.codeHash;
+    if (!isValidOtp) {
+      throw new BadRequestException('Invalid or expired OTP');
+    }
+
+    // Mark OTP as verified
+    await this.prisma.oTP.update({
+      where: { id: otpRecord.id },
+      data: { verified: true },
+    });
+
+    // Generate reset token — valid for 10 minutes
+    const resetToken = randomUUID();
+
+    this.resetTokens.set(resetToken, {
+      userId: user.id,
+      email: user.email!,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+
+    return {
+      verified: true,
+      message: 'OTP verified. Proceed to reset your password.',
+      resetToken,
+    };
   }
 
-  // Send OTP
-  await this.otpService.sendOtp({
-    email,
-    purpose: OtpPurpose.RESET_PASSWORD,
-  });
+  // ─── RESET PASSWORD — 
 
-  return {
-    message: 'If an account with that email exists, an OTP has been sent.',
-    identifier: email,
-  };
-}
+  async resetPassword(dto: ResetPasswordDto) {
+    const { resetToken, newPassword } = dto;
 
-// RESET PASSWORD 
-async resetPassword(dto: ResetPasswordDto) {
-  const { email, otp, newPassword } = dto;
+    // Validate reset token
+    const tokenData = this.resetTokens.get(resetToken);
 
-  // Find user
-  const user = await this.prisma.user.findFirst({
-    where: { email },
-  });
+    if (!tokenData) {
+      throw new BadRequestException(
+        'Invalid or expired reset token. Please start the process again.',
+      );
+    }
 
-  if (!user) {
-    throw new BadRequestException('Invalid request');
-  }
+    if (tokenData.expiresAt < new Date()) {
+      this.resetTokens.delete(resetToken);
+      throw new BadRequestException(
+        'Reset token has expired. Please start the process again.',
+      );
+    }
 
-  // Verify OTP
-  const otpRecord = await this.prisma.oTP.findFirst({
-    where: {
-      OR: [{ email }, { phone: email }],
-      purpose: OtpPurpose.RESET_PASSWORD,
-      verified: false,
-      expiresAt: { gt: new Date() },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+    const user = await this.prisma.user.findUnique({
+      where: { id: tokenData.userId },
+    });
 
-  if (!otpRecord) {
-    throw new BadRequestException('Invalid or expired OTP');
-  }
+    if (!user) throw new BadRequestException('User not found');
 
-  const isValidOtp = hashOTP(otp) === otpRecord.codeHash;
-  if (!isValidOtp) {
-    throw new BadRequestException('Invalid or expired OTP');
-  }
+    // Check new password is not same as old
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+    if (isSamePassword) {
+      throw new BadRequestException(
+        'New password cannot be the same as your current password',
+      );
+    }
 
-  // Check new password is not same as old
-  const isSamePassword = await bcrypt.compare(newPassword, user.password);
-  if (isSamePassword) {
-    throw new BadRequestException('New password cannot be the same as your current password');
-  }
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-  // Hash new password
-  const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-  // Update password + mark OTP as verified
-  await this.prisma.$transaction([
-    this.prisma.user.update({
+    await this.prisma.user.update({
       where: { id: user.id },
       data: {
         password: hashedPassword,
-        failedAttempts: 0,      
-        lockedUntil: null,     
+        failedAttempts: 0,
+        lockedUntil: null,
       },
-    }),
-    this.prisma.oTP.update({
-      where: { id: otpRecord.id },
-      data: { verified: true },
-    }),
-  ]);
+    });
 
-  return {
-    message: 'Password reset successfully. Please log in with your new password.',
-  };
-}
+    // Clean up reset token
+    this.resetTokens.delete(resetToken);
 
+    return {
+      success: true,
+      message: 'Password reset successfully. Please log in with your new password.',
+    };
+  }
 
-  // REFRESH
+  // ─── REFRESH ────────────────────────────────────────────────────
+
   async refresh(dto: RefreshDto) {
     const { refreshToken } = dto;
 
@@ -296,7 +337,8 @@ async resetPassword(dto: ResetPasswordDto) {
     }
   }
 
-  // GENERATE TOKENS
+  // ─── GENERATE TOKENS ────────────────────────────────────────────
+
   async generateTokens(userId: string, email: string) {
     const payload = { sub: userId, email };
 
@@ -314,7 +356,8 @@ async resetPassword(dto: ResetPasswordDto) {
     return { accessToken, refreshToken };
   }
 
-  // HANDLE FAILED LOGIN
+  // ─── HANDLE FAILED LOGIN ─────────────────────────────────────────
+
   private async handleFailedLogin(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const newAttempts = (user?.failedAttempts || 0) + 1;

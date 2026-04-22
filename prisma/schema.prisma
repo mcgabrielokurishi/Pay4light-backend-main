@@ -69,8 +69,13 @@ model User {
   lockedUntil    DateTime?
   discoId        String?
   isVerified     Boolean   @default(false)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+
+  // ── Account status (NEW) ──
+  isActive   Boolean   @default(true)   // false = deactivated
+  deletedAt  DateTime?                  // set = permanently deleted (soft)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   refreshTokens        RefreshToken[]
   wallet               Wallet?
@@ -80,8 +85,54 @@ model User {
   otps                 OTP[]
   devices              Device[]
   meters               Meter[]
+  bankAccounts         BankAccount[]       // NEW
+  cards                Card[]              // NEW
 
   disco Disco? @relation(fields: [discoId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BANK ACCOUNT — stores user's saved bank accounts
+// Used for withdrawals / settlement to user's personal bank
+// ─────────────────────────────────────────────────────────────────────────────
+model BankAccount {
+  id            String   @id @default(uuid())
+  userId        String
+  bankName      String                      // e.g. "Access Bank"
+  bankCode      String                      // e.g. "044"
+  accountNumber String                      // 10-digit NUBAN
+  accountName   String                      // Verified account name
+  isDefault     Boolean  @default(false)    // only one default per user
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, accountNumber])          // no duplicate accounts per user
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CARD — stores user's saved debit/credit cards
+// NOTE: Never store raw CVV in production. In a real app, tokenise with
+// Paystack/Flutterwave and store only the token + masked pan.
+// This module stores the token + display info only.
+// ─────────────────────────────────────────────────────────────────────────────
+model Card {
+  id           String   @id @default(uuid())
+  userId       String
+  cardToken    String                        // token from payment provider
+  last4        String                        // last 4 digits e.g. "4242"
+  brand        String                        // "visa" | "mastercard" | "verve"
+  expMonth     String                        // "12"
+  expYear      String                        // "2027"
+  cardHolderName String?
+  isDefault    Boolean  @default(false)      // only one default per user
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cardToken])
 }
 
 model LedgerEntry {
@@ -148,7 +199,7 @@ model Wallet {
   currency String  @default("NGN")
   locked   Boolean @default(false)
 
-  virtualAccountNuban String?
+  virtualAccountNuban  String?
   virtual_account_bank String?
   virtual_account_ref  String?
 

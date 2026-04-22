@@ -1,15 +1,16 @@
-import { IsEmail, IsNotEmpty, IsString, IsOptional } from 'class-validator';
+import { ApiProperty } from "@nestjs/swagger";
+import { IsEmail, IsString } from 'class-validator';
 
 export class CreateReservedAccountDto {
+  @ApiProperty({ example: "user-uuid-123" })
   @IsString()
-  @IsNotEmpty()
-  reference: string; // Unique per user — use user UUID
+  reference: string;
 
+  @ApiProperty({ example: "John Doe" })
   @IsString()
-  @IsNotEmpty()
-  name: string; // User full name
+  name: string;
 
+  @ApiProperty({ example: "john@gmail.com" })
   @IsEmail()
-  @IsNotEmpty()
   email: string;
 }

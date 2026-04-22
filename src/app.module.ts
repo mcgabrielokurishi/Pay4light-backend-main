@@ -10,6 +10,9 @@ import { PaymentModule } from "./payments/payments.module";
 import { WebhookModule } from "./webhooks/webhooks.module";
 import { TransactionsModule } from "./transaction/transactions.module";
 import { AnalisisModule } from "./analisis/analisis.module";
+import { BankAccountModule } from "./bankAccount/bank-account.module";
+import { CardModule } from "./card/card.module";
+import { AccountModule } from "./account/account.module";
 import { DiscoModule } from "./disco/disco.module";
 import { BuypowerModule } from "./buypower/buypower.module";
 @Module({
@@ -19,6 +22,9 @@ import { BuypowerModule } from "./buypower/buypower.module";
     WalletModule,
     TransactionsModule,
     UsersModule,
+    BankAccountModule,
+    CardModule,
+    AccountModule,
     PaymentModule,
     BuypowerModule,
     ElectricityAIModule,

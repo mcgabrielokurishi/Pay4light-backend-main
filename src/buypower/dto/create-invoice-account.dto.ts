@@ -1,27 +1,28 @@
-import { IsString, IsEmail, IsNotEmpty, IsOptional, IsNumber } from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { isString,IsEmail,IsString,IsNumber} from "class-validator";
 
 export class CreateInvoiceAccountDto {
+  @ApiProperty({ example: "user-uuid-123", description: "Unique reference per user" })
   @IsString()
-  @IsNotEmpty()
-  reference!: string; // Unique per user — use user UUID
+  reference!: string;
 
+  @ApiProperty({ example: "John Doe" })
   @IsString()
-  @IsNotEmpty()
-  name!: string; // User full name
+  name!: string;
 
+  @ApiProperty({ example: "john@gmail.com" })
   @IsEmail()
-  @IsNotEmpty()
   email!: string;
 
+  @ApiPropertyOptional({ example: "Invoice for electricity" })
   @IsString()
-  @IsOptional()
-  description?: string; // Description for the invoice
+  description?: string;
 
+  @ApiPropertyOptional({ example: "2026-05-01T00:00:00Z" })
   @IsString()
-  @IsOptional()
-  expiresAt?: string; // Expiration date
+  expiresAt?: string;
 
+  @ApiProperty({ example: 5000, description: "Amount in Naira" })
   @IsNumber()
-  @IsNotEmpty()
-  amount!: number; // Amount in naira
+  amount!: number;
 }

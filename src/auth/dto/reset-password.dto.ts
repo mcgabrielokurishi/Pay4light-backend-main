@@ -1,26 +1,19 @@
-import { IsEmail, IsString, IsNotEmpty, MinLength, Matches } from 'class-validator';
+// src/auth/dto/reset-password.dto.ts
+import { IsString, IsNotEmpty, MinLength, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ResetPasswordDto {
- @ApiProperty({
-    description:"email",
-    example:"mcgabrielokurishi@gmail.com"
- })
-  @IsEmail()
-  @IsNotEmpty()
-  email: string;
-
-  @ApiProperty({
-    description: "OTP-CODE",
-    example: "123456"
+   @ApiProperty({
+    description : "resetToken",
+    example : "the token give in the verify-forgot-password"
   })
   @IsString()
   @IsNotEmpty()
-  otp: string;
+  resetToken: string; // ← returned from verify step
 
-  @ApiProperty({
-    description : "PassW0rd",
-    example : "P@ssW0rd"
+   @ApiProperty({
+    description : "Password",
+    example : "P@ssw0rd"
   })
   @IsString()
   @MinLength(8)

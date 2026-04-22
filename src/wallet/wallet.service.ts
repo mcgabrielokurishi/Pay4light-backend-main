@@ -2,11 +2,12 @@ import {
   Injectable,
   BadRequestException,
   ForbiddenException,
+  Logger,
+  InternalServerErrorException,
 } from "@nestjs/common";
 import { PrismaService } from "database/prisma.service";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
-import { Logger } from "@nestjs/common";
 import { BuypowerService } from "../buypower/buypower.service";
 
 @Injectable()
@@ -16,82 +17,18 @@ export class WalletService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly buypowerService: BuypowerService,
-  ) {
-    console.log("WalletService initialized");
-  }
-
+  ) {}
+ 
   // CREATE WALLET
-
-
   async createWalletForUser(userId: string) {
     return this.prisma.wallet.create({
       data: { userId },
     });
   }
 
-
-  // VIRTUAL ACCOUNT — BuyPower MFB Reserved Account
-
-
-  /**
-   * Provision a permanent BuyPower virtual account for a user.
-   * Call this once after user registration (in UserService.create).
-   * The user transfers money to this NUBAN to fund their wallet.
-   *
-   * @returns { nuban, bankName } — show this to the user on the wallet screen
-   */
-  async provisionVirtualAccount(user: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-  }) {
-    // Return existing account if already provisioned
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { userId: user.id },
-    });
-
-    if (!wallet) {
-      throw new BadRequestException("Wallet not found");
-    }
-
-    if (wallet.virtualAccountNuban) {
-      return {
-        nuban: wallet.virtualAccountNuban,
-        bankName: wallet.virtual_account_ref,
-      };
-    }
-
-    // Call BuyPower API to create reserved account
-    const result = await this.buypowerService.createReservedAccount({
-      reference: user.id, // user UUID — used to identify user in webhook
-      name: `${user.firstName} ${user.lastName}`,
-      email: user.email,
-    });
-
-    const nuban: string = result?.data?.nuban;
-    const bankName: string = result?.data?.bankName || "BuyPower MFB";
-
-    if (!nuban) {
-      throw new BadRequestException("Failed to provision virtual account");
-    }
-
-    // Persist the virtual account details on the wallet
-    await this.prisma.wallet.update({
-      where: { userId: user.id },
-      data: {
-        virtualAccountNuban: nuban,
-        virtual_account_bank: bankName,
-        virtual_account_ref: user.id,
-      },
-    });
-
-    this.logger.log(`Virtual account provisioned for user ${user.id}: ${nuban}`);
-    return { nuban, bankName };
-  }
-
- 
-  async getVirtualAccount(userId: string) {
+  
+  // GET WALLET
+  async getWallet(userId: string) {
     const wallet = await this.prisma.wallet.findUnique({
       where: { userId },
     });
@@ -100,18 +37,88 @@ export class WalletService {
       throw new BadRequestException("Wallet not found");
     }
 
+    return wallet;
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // PROVISION VIRTUAL ACCOUNT
+  // Idempotent — safe to call multiple times
+  // ─────────────────────────────────────────────────────────────────
+  async provisionVirtualAccount(user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  }) {
+    const wallet = await this.prisma.wallet.findUnique({
+      where: { userId: user.id },
+    });
+
+    if (!wallet) {
+      throw new BadRequestException("Wallet not found — create wallet first");
+    }
+
+    // Already provisioned — return existing
+    if (wallet.virtualAccountNuban) {
+      this.logger.log(`Virtual account already exists for user ${user.id}`);
+      return {
+        nuban: wallet.virtualAccountNuban,
+        bankName: wallet.virtual_account_bank,
+        accountName: `${user.firstName} ${user.lastName}`,
+        alreadyExisted: true,
+      };
+    }
+
+    // Call BuyPower API
+    let nuban: string;
+    let bankName: string;
+
+    try {
+      const result = await this.buypowerService.createReservedAccount({
+        reference: user.id,
+        name: `${user.firstName} ${user.lastName}`,
+        email: user.email,
+      });
+
+      nuban = result?.data?.nuban;
+      bankName = result?.data?.bankName || "BuyPower MFB";
+
+      if (!nuban) {
+        throw new Error("BuyPower returned no NUBAN");
+      }
+    } catch (error) {
+      this.logger.error(
+        `BuyPower account creation failed for user ${user.id}`,
+        error,
+      );
+      throw new InternalServerErrorException(
+        "Could not provision virtual account — please try again",
+      );
+    }
+
+    // Save to wallet
+    const updatedWallet = await this.prisma.wallet.update({
+      where: { userId: user.id },
+      data: {
+        virtualAccountNuban: nuban,
+        virtual_account_bank: bankName,
+        virtual_account_ref: user.id,
+      },
+    });
+
+    this.logger.log(
+      `Virtual account provisioned — user: ${user.id}, nuban: ${nuban}`,
+    );
+
     return {
-      balance: wallet.balance,
-      nuban: wallet.virtualAccountNuban,
-      bankName: wallet.virtual_account_bank|| "BuyPower MFB",
-      accountName: wallet.virtual_account_ref
-        ? "Your Name" // replace with actual user name lookup if needed
-        : null,
-      isProvisioned: !!wallet.virtualAccountNuban,
+      nuban: updatedWallet.virtualAccountNuban,
+      bankName: updatedWallet.virtual_account_bank,
+      accountName: `${user.firstName} ${user.lastName}`,
+      alreadyExisted: false,
     };
   }
 
- 
+  // FIND USER BY NUBAN OR REFERENCE (used by webhook)
   async findUserByNubanOrReference(
     nuban: string,
     reference: string,
@@ -126,85 +133,15 @@ export class WalletService {
     });
 
     if (!wallet) return null;
-
     return { id: wallet.userId };
   }
 
-
-  // GET WALLET
-
-
-  async getWallet(userId: string) {
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { userId },
-    });
-
-    console.log("user", userId);
-
-    if (!wallet) {
-      throw new BadRequestException("Wallet not found");
-    }
-
-    return wallet;
-  }
-
-  // CREDIT WALLET
-  // Used by: existing flows AND the BuyPower webhook handler
-  
- 
-  async credit(
-    userId: string,
-    amount: Prisma.Decimal,
-    description = "Wallet credit",
-  ) {
-    if (amount.lte(0)) {
-      throw new BadRequestException("Invalid amount");
-    }
-
-    return this.prisma.$transaction(async (tx) => {
-      const wallet = await tx.wallet.findUnique({ where: { userId } });
-      if (!wallet) throw new BadRequestException("Wallet not found");
-      if (wallet.locked) throw new ForbiddenException("Wallet is locked");
-
-      const updatedWallet = await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: { increment: Number(amount) } },
-      });
-
-      const transaction = await tx.transaction.create({
-        data: {
-          userId,
-          walletId: wallet.id,
-          type: "WALLET_CREDIT",
-          amount: Number(amount),
-          status: "SUCCESS",
-          reference: randomUUID(),
-          description,
-          metadata: "{}",
-        },
-      });
-
-      return { wallet: updatedWallet, transaction };
-    });
-  }
-
-  /**
-   * Credit via BuyPower webhook — includes idempotency check using externalRef.
-   * This is what the webhook controller calls when a bank transfer lands.
-   *
-   * @param userId      - the wallet owner
-   * @param amount      - amount received in Naira
-   * @param externalRef - BuyPower's transaction ID (prevents double-credit)
-   * @param meta        - extra info to store on the transaction record
-   */
+  // CREDIT FROM WEBHOOK (idempotent via externalRef)
   async creditFromWebhook(
     userId: string,
     amount: number,
     externalRef: string,
-    meta: {
-      description?: string;
-      metadata?: Record<string, any>;
-    } = {},
+    meta: { description?: string; metadata?: Record<string, any> } = {},
   ) {
     const decimalAmount = new Prisma.Decimal(amount);
 
@@ -213,12 +150,11 @@ export class WalletService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // ── Idempotency: bail out if this BuyPower txn was already processed ──
       const existing = await tx.transaction.findUnique({
         where: { reference: externalRef },
       });
       if (existing) {
-        this.logger.warn(`Duplicate webhook ignored — externalRef: ${externalRef}`);
+        this.logger.warn(`Duplicate webhook — ref: ${externalRef}`);
         const wallet = await tx.wallet.findUnique({ where: { userId } });
         return { wallet, transaction: existing, duplicated: true };
       }
@@ -227,69 +163,60 @@ export class WalletService {
       if (!wallet) throw new BadRequestException("Wallet not found");
       if (wallet.locked) throw new ForbiddenException("Wallet is locked");
 
-      // ── Increment balance ──
       const updatedWallet = await tx.wallet.update({
         where: { id: wallet.id },
-        data: { balance: { increment: Number(decimalAmount) } },
+        data: { balance: { increment: decimalAmount.toNumber() } },
       });
 
-      // ── Log the transaction ──
       const transaction = await tx.transaction.create({
         data: {
           userId,
           walletId: wallet.id,
           type: "WALLET_CREDIT",
-          amount: Number(decimalAmount),
+          amount: decimalAmount.toNumber(),
           status: "SUCCESS",
-          reference: externalRef,     // BuyPower txn ID — UNIQUE in DB
+          reference: externalRef,
           description: meta.description || "Wallet funding via BuyPower MFB",
-          metadata: meta.metadata ? JSON.stringify(meta.metadata) : "{}",
+          metadata: JSON.stringify({}),
         },
       });
 
       this.logger.log(
-        `Wallet credited — userId: ${userId}, amount: ₦${amount}, ref: ${externalRef}`,
+        `Wallet credited — userId: ${userId}, amount: NGN${amount}, ref: ${externalRef}`,
       );
 
       return { wallet: updatedWallet, transaction, duplicated: false };
     });
   }
 
-
-  // DEBIT WALLET
-
-  async debit(
+  // CREDIT (internal/manual)
+  async credit(
     userId: string,
     amount: Prisma.Decimal,
-    description = "Wallet debit",
+    description = "Wallet credit",
   ) {
-    if (amount.lte(0)) {
-      throw new BadRequestException("Invalid amount");
-    }
+    if (amount.lte(0)) throw new BadRequestException("Invalid amount");
 
     return this.prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.findUnique({ where: { userId } });
       if (!wallet) throw new BadRequestException("Wallet not found");
       if (wallet.locked) throw new ForbiddenException("Wallet is locked");
-      if (wallet.balance < Number(amount))
-        throw new BadRequestException("Insufficient balance");
 
       const updatedWallet = await tx.wallet.update({
         where: { id: wallet.id },
-        data: { balance: { decrement: Number(amount) } },
+        data: { balance: { increment: amount.toNumber() } },
       });
 
       const transaction = await tx.transaction.create({
         data: {
           userId,
           walletId: wallet.id,
-          type: "WALLET_DEBIT",
-          amount: Number(amount),
+          type: "WALLET_CREDIT",
+          amount : amount.toNumber(),
           status: "SUCCESS",
           reference: randomUUID(),
           description,
-          meterId: "",
-          metadata: "{}",
+          metadata: JSON.stringify({}),
         },
       });
 
@@ -297,18 +224,52 @@ export class WalletService {
     });
   }
 
-  // DEBIT WITH IDEMPOTENCY (Production Safe)
+  // DEBIT
+  async debit(
+    userId: string,
+    amount: Prisma.Decimal,
+    description = "Wallet debit",
+  ) {
+    if (amount.lte(0)) throw new BadRequestException("Invalid amount");
 
+    return this.prisma.$transaction(async (tx) => {
+      const wallet = await tx.wallet.findUnique({ where: { userId } });
+      if (!wallet) throw new BadRequestException("Wallet not found");
+      if (wallet.locked) throw new ForbiddenException("Wallet is locked");
+      if (wallet.balance < amount.toNumber())
+        throw new BadRequestException("Insufficient balance");
 
+      const updatedWallet = await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { balance: { decrement: amount.toNumber() } },
+      });
+
+      const transaction = await tx.transaction.create({
+        data: {
+          userId,
+          walletId: wallet.id,
+          type: "WALLET_DEBIT",
+          amount : amount.toNumber(),
+          status: "SUCCESS",
+          reference: randomUUID(),
+          description,
+          meterId: "",
+          metadata: JSON.stringify({}),
+        },
+      });
+
+      return { wallet: updatedWallet, transaction };
+    });
+  }
+
+  // DEBIT WITH IDEMPOTENCY
   async debitWithIdempotency(
     userId: string,
     amount: Prisma.Decimal,
     reference: string,
     description = "Wallet debit",
   ) {
-    if (amount.lte(0)) {
-      throw new BadRequestException("Invalid amount");
-    }
+    if (amount.lte(0)) throw new BadRequestException("Invalid amount");
 
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.transaction.findUnique({ where: { reference } });
@@ -320,12 +281,12 @@ export class WalletService {
       const wallet = await tx.wallet.findUnique({ where: { userId } });
       if (!wallet) throw new BadRequestException("Wallet not found");
       if (wallet.locked) throw new ForbiddenException("Wallet is locked");
-      if (wallet.balance < Number(amount))
+      if (wallet.balance < amount.toNumber())
         throw new BadRequestException("Insufficient balance");
 
       const updatedWallet = await tx.wallet.update({
         where: { id: wallet.id },
-        data: { balance: { decrement: Number(amount) } },
+        data: { balance: { decrement: amount.toNumber() } },
       });
 
       const transaction = await tx.transaction.create({
@@ -333,12 +294,12 @@ export class WalletService {
           userId,
           walletId: wallet.id,
           type: "WALLET_DEBIT",
-          amount: Number(amount),
+          amount: amount.toNumber(),
           reference,
           meterId: "",
           status: "SUCCESS",
           description,
-          metadata: "{}",
+          metadata: JSON.stringify({}),
         },
       });
 

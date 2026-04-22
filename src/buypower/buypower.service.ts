@@ -112,10 +112,7 @@ export class BuypowerService {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────
-  // TRANSACTIONS
-  // ─────────────────────────────────────────────────────────────────
-
+  
   async getTransactions(page = 1, pageSize = 20) {
     try {
       const response = await firstValueFrom(
