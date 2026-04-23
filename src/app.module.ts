@@ -15,6 +15,7 @@ import { CardModule } from "./card/card.module";
 import { AccountModule } from "./account/account.module";
 import { DiscoModule } from "./disco/disco.module";
 import { BuypowerModule } from "./buypower/buypower.module";
+import { BankModule } from "./bank/bank.module";
 @Module({
   imports: [
     PrismaModule,
@@ -24,6 +25,7 @@ import { BuypowerModule } from "./buypower/buypower.module";
     UsersModule,
     BankAccountModule,
     CardModule,
+    BankModule,
     AccountModule,
     PaymentModule,
     BuypowerModule,

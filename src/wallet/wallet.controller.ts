@@ -60,7 +60,7 @@ export class WalletController {
     const user = req.user;
 
     // Guard: ensure we have the fields needed to call BuyPower
-    if (!user.id || !user.email || !user.firstName || !user.lastName) {
+    if (!user.id || !user.email) {
       throw new BadRequestException(
         "User profile incomplete — firstName, lastName and email are required",
       );
