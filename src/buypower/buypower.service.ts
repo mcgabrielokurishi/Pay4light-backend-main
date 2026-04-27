@@ -26,106 +26,94 @@ export class BuypowerService {
     };
   }
 
-  async createReservedAccount(dto: CreateReservedAccountDto) {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.baseUrl}/v1/accounts/reserved`,
-          {
-            reference: dto.reference,
-            name: dto.name,
-            email: dto.email,
-          },
-          { headers: this.headers },
-        ),
-      );
-      return response.data;
-    } catch (error) {
-      const axiosError = error as any;
-      this.logger.error('Failed to create reserved account', axiosError?.response?.data);
-      throw new BadRequestException(
-        (axiosError?.response?.data as any)?.message || 'Failed to create reserved account',
-      );
-    }
-  }
-
-  /**
-   * Fetch all reserved accounts (for reconciliation/admin use)
-   */
-  async getReservedAccounts() {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.baseUrl}/v1/accounts/reserved`, {
-          headers: this.headers,
-        }),
-      );
-      return response.data;
-    } catch (error) {
-      const axiosError = error as any;
-      this.logger.error('Failed to fetch reserved accounts', axiosError?.response?.data);
-      throw new BadRequestException('Failed to fetch reserved accounts');
-    }
-  }
-
-  async createInvoiceAccount(dto: CreateInvoiceAccountDto) {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.baseUrl}/v1/accounts/invoices`,
-          {
-            reference: dto.reference,
-            name: dto.name,
-            email: dto.email,
-            description: dto.description || 'Wallet funding',
-            expiresAt: dto.expiresAt,
-            amount: dto.amount,
-          },
-          { headers: this.headers },
-        ),
-      );
-      return response.data;
-    } catch (error) {
-      const axiosError = error as any;
-      this.logger.error('Failed to create invoice account', axiosError?.response?.data);
-      throw new BadRequestException(
-        (axiosError?.response?.data as any)?.message || 'Failed to create invoice account',
-      );
-    }
-  }
-
-  /**
-   * Get all invoice accounts (paginated)
-   */
-  async getInvoiceAccounts(page = 1, pageSize = 10) {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.baseUrl}/v1/accounts/invoices`, {
-          headers: this.headers,
-          params: { page, pageSize },
-        }),
-      );
-      return response.data;
-    } catch (error) {
-      const axiosError = error as any;
-      this.logger.error('Failed to fetch invoice accounts', axiosError?.response?.data);
-      throw new BadRequestException('Failed to fetch invoice accounts');
-    }
-  }
-
   
-  async getTransactions(page = 1, pageSize = 20) {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.baseUrl}/v1/transactions`, {
+
+  async createReservedAccount(dto: CreateReservedAccountDto) {
+  try {
+    console.log('Sending to BuyPower:', dto);
+
+    const response = await firstValueFrom(
+      this.httpService.post(
+        `${this.baseUrl}/v1/accounts/reserved`, // ✅ correct URL
+        {
+          exRef: dto.exRef,           // ✅ not "reference"
+          name: dto.name,
+          description: dto.description,
+          accountType: dto.accountType,
+          value: {
+            ...(dto.bvn ? { bvn: dto.bvn } : {}),
+            ...(dto.nin ? { nin: dto.nin } : {}),
+          },
+          // ❌ no email
+          // ❌ no reference
+        },
+        {
           headers: this.headers,
-          params: { page, pageSize },
-        }),
+          timeout: 30000,
+        },
+      ),
+    );
+
+    console.log('BuyPower success:', response.data);
+    return response.data;
+
+  } catch (error) {
+    const axiosError = error as any;
+    console.error('BuyPower error:', {
+      status: axiosError?.response?.status,
+      data: axiosError?.response?.data,
+      message: axiosError?.message,
+    });
+
+    if (!axiosError?.response) {
+      throw new BadRequestException(
+        `Cannot reach BuyPower API: ${axiosError?.message}`,
       );
-      return response.data;
-    } catch (error) {
-      const axiosError = error as any;
-      this.logger.error('Failed to fetch transactions', axiosError?.response?.data);
-      throw new BadRequestException('Failed to fetch transactions');
     }
+
+    throw new BadRequestException(
+      axiosError?.response?.data?.message || 'Failed to create reserved account',
+    );
   }
+}
+
+async getReservedAccounts() {
+  const response = await firstValueFrom(
+    this.httpService.get(`${this.baseUrl}/accounts/reserved`, { 
+      headers: this.headers,
+    }),
+  );
+  return response.data;
+}
+
+async createInvoiceAccount(dto: CreateInvoiceAccountDto) {
+  const response = await firstValueFrom(
+    this.httpService.post(
+      `${this.baseUrl}/accounts/invoices`,
+      { ...dto },
+      { headers: this.headers, timeout: 30000 },
+    ),
+  );
+  return response.data;
+}
+
+async getInvoiceAccounts(page = 1, pageSize = 10) {
+  const response = await firstValueFrom(
+    this.httpService.get(`${this.baseUrl}/accounts/invoices`, { // ✅ no /v1
+      headers: this.headers,
+      params: { page, pageSize },
+    }),
+  );
+  return response.data;
+}
+
+async getTransactions(page = 1, pageSize = 20) {
+  const response = await firstValueFrom(
+    this.httpService.get(`${this.baseUrl}/transactions`, { 
+      headers: this.headers,
+      params: { page, pageSize },
+    }),
+  );
+  return response.data;
+}
 }

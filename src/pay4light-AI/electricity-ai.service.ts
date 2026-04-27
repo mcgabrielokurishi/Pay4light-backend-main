@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import OpenAI from 'openai';
 import { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
 import { PrismaService } from 'database/prisma.service';
-import { VendorService } from 'src/vendor/vendor.service';
+import { VendingService } from 'src/vendor/vendor.service';
 import { WalletService } from 'src/wallet/wallet.service';
 import { AI_TOOLS } from './ai.tools';
 import { ELECTRICAL_KNOWLEDGE } from './knowledge-base/Knowlege';
@@ -15,7 +15,7 @@ export class AiService {
 
   constructor(
     private prisma: PrismaService,
-    private vendorService: VendorService,
+    private vendorService: VendingService,
     private walletService: WalletService,
   ) {
     this.openai = new OpenAI({

@@ -22,7 +22,7 @@ export class TransactionsController {
     @CurrentUser() user,
     @Query() query: QueryTransactionsDto
   ) {
-    return this.transactionsService.getUserTransactions(user.userId, query);
+    return this.transactionsService.getUserTransactions(user.id, query);
   }
 
   @Get(":id")
@@ -30,7 +30,7 @@ export class TransactionsController {
     @CurrentUser() user,
     @Param("id") id: string
   ) {
-    return this.transactionsService.getSingleTransaction(user.userId, id);
+    return this.transactionsService.getSingleTransaction(user.id, id);
   }
   @Get('transactions/export/csv')
   async exportCSV(

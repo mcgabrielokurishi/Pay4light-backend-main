@@ -49,7 +49,9 @@ export class WalletService {
     firstName: string;
     lastName: string;
     email: string;
-  }) {
+    nin? : string;
+    bvn? : string;
+   }) {
     const wallet = await this.prisma.wallet.findUnique({
       where: { userId: user.id },
     });
@@ -75,10 +77,13 @@ export class WalletService {
 
     try {
       const result = await this.buypowerService.createReservedAccount({
-        reference: user.id,
-        name: `${user.firstName} ${user.lastName}`,
-        email: user.email,
-      });
+  exRef: user.id,                          
+  name: `${user.firstName} ${user.lastName}`,
+  description: `Pay4Light wallet for ${user.email}`, 
+  accountType: 'STATIC',                   
+  bvn: user.bvn ?? undefined,             
+  nin: user.nin?? undefined,             
+});
 
       nuban = result?.data?.nuban;
       bankName = result?.data?.bankName || "BuyPower MFB";

@@ -1,16 +1,57 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { IsEmail, IsString } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsNotEmpty, IsOptional, IsEnum } from 'class-validator';
+
+export enum AccountType {
+  STATIC = 'STATIC',
+  DYNAMIC = 'DYNAMIC',
+}
 
 export class CreateReservedAccountDto {
-  @ApiProperty({ example: "user-uuid-123" })
+  @ApiProperty({
+    description : "refreence",
+    example : ""
+  })
   @IsString()
-  reference: string;
+  @IsNotEmpty()
+  exRef: string; 
 
-  @ApiProperty({ example: "John Doe" })
+  @ApiProperty({
+    description: "name",
+    example : "mcgabriel okurishi"
+  })
   @IsString()
+  @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ example: "john@gmail.com" })
-  @IsEmail()
-  email: string;
+  @ApiProperty({
+    description : "descprition",
+    example : "Pay4Light wallet funding account"
+  })
+  @IsString()
+  @IsNotEmpty()
+  description: string; 
+
+  @ApiProperty({
+    description : "account type",
+    example : "DYNAMIC"
+  })
+  @IsString()
+  @IsNotEmpty()
+  accountType: string; 
+
+  @ApiProperty({
+    description : "BVN",
+    example : "3454555455"
+  })
+  @IsString()
+  @IsOptional()
+  bvn?: string; 
+
+  @ApiProperty({
+    description : "nin",
+    example : "1234567890"
+  })
+  @IsString()
+  @IsOptional()
+  nin?: string;
 }

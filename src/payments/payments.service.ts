@@ -29,9 +29,9 @@ export class PaymentsService {
       "https://api.paystack.co/transaction/initialize",
       {
         email: dto.email,
-        amount: dto.amount * 100, // kobo
+        amount: dto.amount * 100,
         reference,
-        callback_url: "https://your-frontend.com/success",
+        callback_url: "https://-frontend.com/success",
       },
       {
         headers: {

@@ -67,6 +67,8 @@ model User {
   fullName       String?
   failedAttempts Int       @default(0)
   lockedUntil    DateTime?
+  bvn String? 
+  nin String? 
   discoId        String?
   isVerified     Boolean   @default(false)
 

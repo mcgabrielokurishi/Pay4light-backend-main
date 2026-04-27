@@ -6,13 +6,12 @@ import {
   UseGuards,
   Req,
   BadRequestException,
-  HttpCode,
-  HttpStatus,
+  NotFoundException,
 } from "@nestjs/common";
-import { Request } from "express";
 import { WalletService } from "./wallet.service";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { Prisma } from "@prisma/client";
+import { PrismaService } from "database/prisma.service";
 import { CreditWalletDto } from "./dto/credit.dto";
 
 type AuthenticatedRequest = Request & {
@@ -28,57 +27,75 @@ type AuthenticatedRequest = Request & {
 @Controller("wallet")
 @UseGuards(JwtAuthGuard)
 export class WalletController {
-  constructor(private readonly walletService: WalletService) {}
+  constructor(
+    private readonly walletService: WalletService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   // ─────────────────────────────────────────────────────────────────
   // GET /wallet
-  // Returns wallet + virtual account details
   // ─────────────────────────────────────────────────────────────────
   @Get()
-  async getWallet(@Req() req: AuthenticatedRequest) {
+  async getWallet(@Req() req: any) {
     return this.walletService.getWallet(req.user.id);
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // POST /wallet/provision-account
-  //
+  // POST /wallet/provision-virtual-account
   // Creates a permanent BuyPower MFB virtual account for the user.
-  // Safe to call multiple times — returns existing account if already provisioned.
-  // The returned NUBAN is what the user transfers money to from their bank.
-  //
-  // Response:
-  // {
-  //   "nuban": "9006346638",
-  //   "bankName": "BuyPower MFB",
-  //   "accountName": "John Doe",
-  //   "alreadyExisted": false
-  // }
+  // Safe to call multiple times — returns existing if already provisioned.
   // ─────────────────────────────────────────────────────────────────
-  @Post("provision-account")
-  @HttpCode(HttpStatus.OK)
-  async provisionAccount(@Req() req: AuthenticatedRequest) {
-    const user = req.user;
+  @Post('provision-virtual-account')
+  async provisionVirtualAccount(@Req() req: any) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        fullName: true,
+        email: true,
+        nin: true,
+        bvn: true,
+      },
+    });
 
-    // Guard: ensure we have the fields needed to call BuyPower
-    if (!user.id || !user.email) {
+    if (!user) throw new NotFoundException('User not found');
+    if (!user.email) throw new BadRequestException('Email is required');
+
+    // ✅ Require BVN or NIN — BuyPower mandates at least one
+    if (!user.bvn && !user.nin) {
       throw new BadRequestException(
-        "User profile incomplete — firstName, lastName and email are required",
+        'BVN or NIN is required to provision a virtual account. Please update your profile.',
       );
     }
 
+    // ✅ Handle null names gracefully
+    const firstName =
+      user.firstName ??
+      user.fullName?.split(' ')[0] ??
+      user.email.split('@')[0];
+
+    const lastName =
+      user.lastName ??
+      user.fullName?.split(' ').slice(1).join(' ') ??
+      'User';
+
     return this.walletService.provisionVirtualAccount({
       id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
+      firstName,
+      lastName,
       email: user.email,
+      bvn: user.bvn ?? undefined,   
+      nin: user.nin ?? undefined,   
     });
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // POST /wallet/credit  (existing)
+  // POST /wallet/credit
   // ─────────────────────────────────────────────────────────────────
   @Post("credit")
-  async credit(@Req() req: AuthenticatedRequest, @Body() dto: CreditWalletDto) {
+  async credit(@Req() req: any, @Body() dto: CreditWalletDto) {
     const { amount } = dto;
 
     if (amount === undefined || isNaN(amount)) {
@@ -92,11 +109,11 @@ export class WalletController {
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // POST /wallet/debit  (existing)
+  // POST /wallet/debit
   // ─────────────────────────────────────────────────────────────────
   @Post("debit")
   async debit(
-    @Req() req: AuthenticatedRequest,
+    @Req() req: any,
     @Body("amount") amount: number,
   ) {
     if (!amount || isNaN(amount)) {

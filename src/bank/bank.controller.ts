@@ -10,7 +10,7 @@ export class BankController {
   // GET ALL BANKS
   @Get('banks')
   getAllBanks(@Query() query: BankQueryDto) {
-    const banks = this.bankService.getAllBanks(query.search);
+    const banks = this.bankService.getAllBanks();
     return {
       success: true,
       message: 'Nigerian banks retrieved successfully',

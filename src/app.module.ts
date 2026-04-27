@@ -3,7 +3,7 @@ import { PrismaModule } from "database/database.module";
 import { WalletModule } from "./wallet/wallet.module";
 import { AuthModule } from "./auth/auth.module";
 import { ElectricityAIModule } from "./pay4light-AI/electricity-ai.module";
-import { VendorModule } from "./vendor/vendor.module";
+import { VendingModule } from "./vendor/vendor.module";
 import { UsersModule } from "./users/users.module";
 import { MeterModule } from "./meter/meter.module";
 import { PaymentModule } from "./payments/payments.module";
@@ -30,7 +30,7 @@ import { BankModule } from "./bank/bank.module";
     PaymentModule,
     BuypowerModule,
     ElectricityAIModule,
-    VendorModule,
+    VendingModule,
     MeterModule,
     AnalisisModule,
     WebhookModule,
