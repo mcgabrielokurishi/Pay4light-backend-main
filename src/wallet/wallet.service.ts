@@ -76,22 +76,22 @@ async provisionVirtualAccount(user: {
 
   try {
     const result = await this.buypowerService.createReservedAccount({
-      exRef:       user.id,
-      name:        `${user.firstName} ${user.lastName}`,
-      description: `Pay4Light wallet for ${user.email}`,
-      ser:         user.id,
-    });
+  exRef: user.id,
+  name: `${user.firstName} ${user.lastName}`,
+  description: `Pay4Light wallet for ${user.email}`,
+  ser: user.id,
+});
 
-    console.log('BuyPower reserved account result:', result);
+console.log('BuyPower reserved account result:', result);
 
-    // ✅ Handle different response structures
-    nuban    = result?.data?.nuban    ?? result?.nuban;
-    bankName = result?.data?.bankName ?? result?.bankName ?? 'BuyPower MFB';
 
-    if (!nuban) {
-      console.error('Full BuyPower response:', JSON.stringify(result, null, 2));
-      throw new Error('BuyPower returned no NUBAN');
-    }
+nuban = result?.data?.accountNumber ?? result?.accountNumber;
+bankName = result?.data?.bankName ?? result?.bankName ?? 'BuyPower MFB';
+
+if (!nuban) {
+  console.error('Full BuyPower response:', JSON.stringify(result, null, 2));
+  throw new Error('BuyPower returned no account number');
+}
 
   } catch (error) {
     this.logger.error(
