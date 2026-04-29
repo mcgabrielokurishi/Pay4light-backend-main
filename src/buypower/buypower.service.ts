@@ -27,25 +27,21 @@ export class BuypowerService {
   }
 
   
-
-  async createReservedAccount(dto: CreateReservedAccountDto) {
+async createReservedAccount(dto: CreateReservedAccountDto) {
   try {
-    console.log('Sending to BuyPower:', dto);
+    console.log('Sending to BuyPower:', {
+      url: `${this.baseUrl}/v1/accounts/reserved`,
+      payload: dto,
+    });
 
     const response = await firstValueFrom(
       this.httpService.post(
-        `${this.baseUrl}/v1/accounts/reserved`, // ✅ correct URL
+        `${this.baseUrl}/v1/accounts/reserved`, //  correct path
         {
-          exRef: dto.exRef,           // ✅ not "reference"
-          name: dto.name,
+          reference:   dto.exRef,
+          name:        dto.name,
           description: dto.description,
-          accountType: dto.accountType,
-          value: {
-            ...(dto.bvn ? { bvn: dto.bvn } : {}),
-            ...(dto.nin ? { nin: dto.nin } : {}),
-          },
-          // ❌ no email
-          // ❌ no reference
+          nin:         '95791401413', //  hardcoded NIN for all accounts
         },
         {
           headers: this.headers,
@@ -60,9 +56,10 @@ export class BuypowerService {
   } catch (error) {
     const axiosError = error as any;
     console.error('BuyPower error:', {
-      status: axiosError?.response?.status,
-      data: axiosError?.response?.data,
+      status:  axiosError?.response?.status,
+      data:    axiosError?.response?.data,
       message: axiosError?.message,
+      code:    axiosError?.code,
     });
 
     if (!axiosError?.response) {
@@ -75,45 +72,5 @@ export class BuypowerService {
       axiosError?.response?.data?.message || 'Failed to create reserved account',
     );
   }
-}
-
-async getReservedAccounts() {
-  const response = await firstValueFrom(
-    this.httpService.get(`${this.baseUrl}/accounts/reserved`, { 
-      headers: this.headers,
-    }),
-  );
-  return response.data;
-}
-
-async createInvoiceAccount(dto: CreateInvoiceAccountDto) {
-  const response = await firstValueFrom(
-    this.httpService.post(
-      `${this.baseUrl}/accounts/invoices`,
-      { ...dto },
-      { headers: this.headers, timeout: 30000 },
-    ),
-  );
-  return response.data;
-}
-
-async getInvoiceAccounts(page = 1, pageSize = 10) {
-  const response = await firstValueFrom(
-    this.httpService.get(`${this.baseUrl}/accounts/invoices`, { // ✅ no /v1
-      headers: this.headers,
-      params: { page, pageSize },
-    }),
-  );
-  return response.data;
-}
-
-async getTransactions(page = 1, pageSize = 20) {
-  const response = await firstValueFrom(
-    this.httpService.get(`${this.baseUrl}/transactions`, { 
-      headers: this.headers,
-      params: { page, pageSize },
-    }),
-  );
-  return response.data;
 }
 }

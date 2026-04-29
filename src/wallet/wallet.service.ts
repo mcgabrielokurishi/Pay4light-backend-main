@@ -44,84 +44,86 @@ export class WalletService {
   // PROVISION VIRTUAL ACCOUNT
   // Idempotent — safe to call multiple times
   // ─────────────────────────────────────────────────────────────────
-  async provisionVirtualAccount(user: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    nin? : string;
-    bvn? : string;
-   }) {
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { userId: user.id },
-    });
+async provisionVirtualAccount(user: {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  nin?: string;
+  bvn?: string;
+}) {
+  const wallet = await this.prisma.wallet.findUnique({
+    where: { userId: user.id },
+  });
 
-    if (!wallet) {
-      throw new BadRequestException("Wallet not found — create wallet first");
-    }
+  if (!wallet) {
+    throw new BadRequestException('Wallet not found — create wallet first');
+  }
 
-    // Already provisioned — return existing
-    if (wallet.virtualAccountNuban) {
-      this.logger.log(`Virtual account already exists for user ${user.id}`);
-      return {
-        nuban: wallet.virtualAccountNuban,
-        bankName: wallet.virtual_account_bank,
-        accountName: `${user.firstName} ${user.lastName}`,
-        alreadyExisted: true,
-      };
-    }
-
-    // Call BuyPower API
-    let nuban: string;
-    let bankName: string;
-
-    try {
-      const result = await this.buypowerService.createReservedAccount({
-  exRef: user.id,                          
-  name: `${user.firstName} ${user.lastName}`,
-  description: `Pay4Light wallet for ${user.email}`, 
-  accountType: 'STATIC',                   
-  bvn: user.bvn ?? undefined,             
-  nin: user.nin?? undefined,             
-});
-
-      nuban = result?.data?.nuban;
-      bankName = result?.data?.bankName || "BuyPower MFB";
-
-      if (!nuban) {
-        throw new Error("BuyPower returned no NUBAN");
-      }
-    } catch (error) {
-      this.logger.error(
-        `BuyPower account creation failed for user ${user.id}`,
-        error,
-      );
-      throw new InternalServerErrorException(
-        "Could not provision virtual account — please try again",
-      );
-    }
-
-    // Save to wallet
-    const updatedWallet = await this.prisma.wallet.update({
-      where: { userId: user.id },
-      data: {
-        virtualAccountNuban: nuban,
-        virtual_account_bank: bankName,
-        virtual_account_ref: user.id,
-      },
-    });
-
-    this.logger.log(
-      `Virtual account provisioned — user: ${user.id}, nuban: ${nuban}`,
-    );
-
+  // Already provisioned — return existing
+  if (wallet.virtualAccountNuban) {
+    this.logger.log(`Virtual account already exists for user ${user.id}`);
     return {
-      nuban: updatedWallet.virtualAccountNuban,
-      bankName: updatedWallet.virtual_account_bank,
-      accountName: `${user.firstName} ${user.lastName}`,
-      alreadyExisted: false,
+      nuban:          wallet.virtualAccountNuban,
+      bankName:       wallet.virtual_account_bank,
+      accountName:    `${user.firstName} ${user.lastName}`,
+      alreadyExisted: true,
     };
   }
+
+  let nuban: string;
+  let bankName: string;
+
+  try {
+    const result = await this.buypowerService.createReservedAccount({
+      exRef:       user.id,
+      name:        `${user.firstName} ${user.lastName}`,
+      description: `Pay4Light wallet for ${user.email}`,
+      ser:         user.id,
+    });
+
+    console.log('BuyPower reserved account result:', result);
+
+    // ✅ Handle different response structures
+    nuban    = result?.data?.nuban    ?? result?.nuban;
+    bankName = result?.data?.bankName ?? result?.bankName ?? 'BuyPower MFB';
+
+    if (!nuban) {
+      console.error('Full BuyPower response:', JSON.stringify(result, null, 2));
+      throw new Error('BuyPower returned no NUBAN');
+    }
+
+  } catch (error) {
+    this.logger.error(
+      `BuyPower account creation failed for user ${user.id}`,
+      error,
+    );
+    throw new InternalServerErrorException(
+      'Could not provision virtual account — please try again',
+    );
+  }
+
+  // Save to wallet
+  const updatedWallet = await this.prisma.wallet.update({
+    where: { userId: user.id },
+    data: {
+      virtualAccountNuban:  nuban,
+      virtual_account_bank: bankName,
+      virtual_account_ref:  user.id,
+    },
+  });
+
+  this.logger.log(
+    `Virtual account provisioned — user: ${user.id}, nuban: ${nuban}`,
+  );
+
+  return {
+    nuban:          updatedWallet.virtualAccountNuban,
+    bankName:       updatedWallet.virtual_account_bank,
+    accountName:    `${user.firstName} ${user.lastName}`,
+    alreadyExisted: false,
+  };
+}
 
   // FIND USER BY NUBAN OR REFERENCE (used by webhook)
   async findUserByNubanOrReference(

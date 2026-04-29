@@ -1,57 +1,39 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsEnum } from 'class-validator';
-
-export enum AccountType {
-  STATIC = 'STATIC',
-  DYNAMIC = 'DYNAMIC',
-}
+// src/buypower/dto/create-reserved-account.dto.ts
+import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateReservedAccountDto {
   @ApiProperty({
-    description : "refreence",
-    example : ""
+    description: 'External reference for the reserved account',
+    example: 'REF123456',
   })
   @IsString()
   @IsNotEmpty()
-  exRef: string; 
+  exRef: string;
 
   @ApiProperty({
-    description: "name",
-    example : "mcgabriel okurishi"
+    description: 'Name of the reserved account holder',
+    example: 'John Doe',
   })
   @IsString()
   @IsNotEmpty()
   name: string;
 
   @ApiProperty({
-    description : "descprition",
-    example : "Pay4Light wallet funding account"
+    description: 'Description of the reserved account',
+    example: 'Reserved account for electricity payments',
   })
   @IsString()
   @IsNotEmpty()
-  description: string; 
+  description: string;
 
-  @ApiProperty({
-    description : "account type",
-    example : "DYNAMIC"
-  })
-  @IsString()
-  @IsNotEmpty()
-  accountType: string; 
-
-  @ApiProperty({
-    description : "BVN",
-    example : "3454555455"
+  ser
+  // NIN is hardcoded in the service
+  @ApiPropertyOptional({
+    description: 'Bank Verification Number (optional)',
+    example: '12345678901',
   })
   @IsString()
   @IsOptional()
-  bvn?: string; 
-
-  @ApiProperty({
-    description : "nin",
-    example : "1234567890"
-  })
-  @IsString()
-  @IsOptional()
-  nin?: string;
+  bvn?: string;
 }

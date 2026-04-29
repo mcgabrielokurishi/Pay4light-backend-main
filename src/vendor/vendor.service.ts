@@ -11,6 +11,7 @@ import { WalletService } from 'src/wallet/wallet.service';
 import { firstValueFrom } from 'rxjs';
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
+import {NotificationService} from 'src/notification/notification.service';
 import { VendElectricityDto } from './dto/vend-electricity.dto';
 import { VendTvDto } from './dto/vend-tv.dto';
 import { VendDataDto } from './dto/vend-data.dto';
@@ -20,12 +21,14 @@ export class VendingService {
   private readonly logger = new Logger(VendingService.name);
   private readonly baseUrl: string;
   private readonly apiKey: string;
+  
 
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
     private readonly walletService: WalletService,
+    private readonly notificationService: NotificationService,
   ) {
     this.baseUrl = this.configService.get<string>('BUYPOWER_BASE_URL') || 'https://idev.buypower.ng';
     this.apiKey  = this.configService.get<string>('BUYPOWER_API_KEY')  || '';
@@ -37,6 +40,7 @@ export class VendingService {
       'Content-Type': 'application/json',
     };
   }
+  
 
   //CHECK METER
   async checkMeter(meter: string, disco: string, vendType: string) {
@@ -179,6 +183,12 @@ export class VendingService {
         });
 
         this.logger.log(`Electricity vended — orderId: ${orderId}, token: ${vendData?.token}`);
+
+        await this.notificationService.notifyElectricity(
+          userId,
+          `✅ Electricity purchased! Token: ${vendData?.token}. Units: ${vendData?.units} kWh`,
+          { token: vendData?.token, units: vendData?.units, orderId },
+        );
 
         return {
           success:      true,

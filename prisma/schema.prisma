@@ -7,6 +7,24 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  TRANSACTION
+  ELECTRICITY
+  SYSTEM
+}
+
+enum InfoCategory {
+  GENERAL
+  ELECTRICITY
+  BILLING
+  SAFETY
+  FAQ
+  TIP
+}
+
 model Device {
   id          String   @id @default(uuid())
   userId      String
@@ -21,6 +39,31 @@ model Device {
 
   @@unique([userId, deviceId])
 }
+model Notification {
+  id        String   @id @default(uuid())
+  type      String
+  message   String
+  isRead    Boolean  @default(false)
+  metadata  String?  // changed from Json
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id])
+}
+
+
+
+model Information {
+  id          String          @id @default(cuid())
+  title       String
+  content     String
+  category    InfoCategory    @default(GENERAL)
+  isPublished Boolean         @default(true)
+  createdBy   String          // admin userId
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
 
 model VendorTransaction {
   id              String   @id @default(uuid())
@@ -87,6 +130,7 @@ model User {
   otps                 OTP[]
   devices              Device[]
   meters               Meter[]
+  notifications Notification[]
   bankAccounts         BankAccount[]       // NEW
   cards                Card[]              // NEW
 
