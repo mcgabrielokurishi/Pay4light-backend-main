@@ -76,10 +76,11 @@ async provisionVirtualAccount(user: {
 
   try {
     const result = await this.buypowerService.createReservedAccount({
-  exRef: user.id,
+  reference: user.id,
   name: `${user.firstName} ${user.lastName}`,
   description: `Pay4Light wallet for ${user.email}`,
-  ser: user.id,
+  nin: user.nin,
+  bvn: user.bvn,
 });
 
 console.log('BuyPower reserved account result:', result);

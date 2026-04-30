@@ -5,6 +5,7 @@ import { AuthController } from "./auth.controller";
 import { JwtStrategy } from "./jwt.strategy";
 import { AuthService } from "./auth.service";
 import { OtpModule } from "./OTP/otp.module";
+import { WalletModule } from "src/wallet/wallet.module";
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { OtpModule } from "./OTP/otp.module";
       signOptions: { expiresIn: "1h" },
     }),
     OtpModule,
+    WalletModule
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

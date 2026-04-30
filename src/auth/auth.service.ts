@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from "@nestjs/common";
 import { PrismaService } from "database/prisma.service";
 import * as bcrypt from "bcrypt";
@@ -18,9 +19,11 @@ import { ForgotPasswordDto } from "./dto/forgotten-password.dto";
 import { VerifyForgotPasswordDto } from "./dto/verify-forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { randomUUID } from "crypto";
+import { WalletService } from "src/wallet/wallet.service";
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private MAX_FAILED_ATTEMPTS = 5;
   private LOCK_TIME_MINUTES = 15;
 
@@ -44,6 +47,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private otpService: OtpService,
+     private walletService: WalletService,
   ) {}
 
   // ─── REGISTER ───────────────────────────────────────────────────
@@ -121,28 +125,70 @@ export class AuthService {
     });
     if (existingUser) throw new ConflictException("User already exists");
 
-    const newUser = await this.prisma.$transaction(async (db) => {
-      const createdUser = await db.user.create({
-        data: {
-          fullName: pending.fullName,
-          email: pending.email,
-          phone: pending.phone,
-          password: pending.hashedPassword,
-          isVerified: true,
-        },
-      });
-
-      await db.wallet.create({
-        data: { userId: createdUser.id, balance: 0 },
-      });
-
-      return createdUser;
+     const newUser = await this.prisma.$transaction(async (db) => {
+    const createdUser = await db.user.create({
+      data: {
+        fullName:   pending.fullName,
+        email:      pending.email,
+        phone:      pending.phone,
+        password:   pending.hashedPassword,
+        isVerified: true,
+      },
     });
+
+    await db.wallet.create({
+      data: { userId: createdUser.id, balance: 0 },
+    });
+
+    return createdUser;
+  });
+
+  this.pendingRegistrations.delete(identifier);
+
+  // ✅ Provision virtual account in background — don't block registration
+  this.provisionAccountAfterRegistration(newUser).catch((err) => {
+    this.logger.warn(
+      `Virtual account provisioning failed for user ${newUser.id}: ${err.message}`,
+    );
+  });
 
     this.pendingRegistrations.delete(identifier);
 
     return this.generateTokens(newUser.id, newUser.email ?? newUser.phone!);
+    
   }
+  private async provisionAccountAfterRegistration(user: {
+  id:       string;
+  fullName: string | null;
+  email:    string | null;
+  phone:    string | null;
+}) {
+  try {
+    const firstName =
+      user.fullName?.split(' ')[0] ??
+      user.email?.split('@')[0] ??
+      'Pay4Light';
+
+    const lastName =
+      user.fullName?.split(' ').slice(1).join(' ') ??
+      'User';
+
+    await this.walletService.provisionVirtualAccount({
+      id: user.id,
+      firstName,
+      lastName,
+      email: user.email ?? '',
+    });
+
+    this.logger.log(`Virtual account provisioned for user ${user.id}`);
+  } catch (error) {
+    this.logger.error(
+      `Failed to provision virtual account for user ${user.id}`,
+      error,
+    );
+  }
+}
+
 
   // ─── LOGIN 
 

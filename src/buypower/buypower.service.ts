@@ -38,7 +38,7 @@ async createReservedAccount(dto: CreateReservedAccountDto) {
       this.httpService.post(
         `${this.baseUrl}/v1/accounts/reserved`, //  correct path
         {
-          reference:   dto.exRef,
+          reference:   dto.reference,
           name:        dto.name,
           description: dto.description,
           nin:         '95791401413', //  hardcoded NIN for all accounts
