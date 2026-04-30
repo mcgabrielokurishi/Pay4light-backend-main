@@ -6,6 +6,7 @@ import { JwtStrategy } from "./jwt.strategy";
 import { AuthService } from "./auth.service";
 import { OtpModule } from "./OTP/otp.module";
 import { WalletModule } from "src/wallet/wallet.module";
+import { forwardRef } from "@nestjs/common";
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { WalletModule } from "src/wallet/wallet.module";
       signOptions: { expiresIn: "1h" },
     }),
     OtpModule,
-    WalletModule
+    forwardRef(() => WalletModule)
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
