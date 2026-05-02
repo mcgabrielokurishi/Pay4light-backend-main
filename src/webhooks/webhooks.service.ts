@@ -1,8 +1,13 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+// src/webhook/webhook.service.ts
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+} from '@nestjs/common';
 import * as crypto from 'crypto';
-import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from 'database/prisma.service';
 import { WalletService } from 'src/wallet/wallet.service';
+import { NotificationService } from 'src/notification/notification.service';
 
 @Injectable()
 export class WebhookService {
@@ -11,14 +16,22 @@ export class WebhookService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly walletService: WalletService,
+    private readonly notificationService: NotificationService,
   ) {}
 
-  verifySignature(signature: string, rawBody: string): boolean {
+  // ✅ Verify BuyPower webhook signature
+  verifyBuyPowerSignature(signature: string, rawBody: string): boolean {
     const secret = process.env.BUYPOWER_WEBHOOK_SECRET;
 
     if (!secret) {
-      this.logger.error('Webhook secret not configured');
-      throw new Error('Missing webhook secret'); 
+      this.logger.error('BUYPOWER_WEBHOOK_SECRET not set');
+      return false;
+    }
+
+    if (!signature) {
+      this.logger.warn('No signature provided — skipping in dev');
+      // ✅ In development, skip signature check
+      return process.env.NODE_ENV !== 'production';
     }
 
     const hash = crypto
@@ -29,153 +42,137 @@ export class WebhookService {
     return hash === signature;
   }
 
-  verifySignaturePayment(signature: string, rawBody: string): boolean {
-    const secret = process.env.PAYSTACK_WEBHOOK_SECRET;
+  // ✅ Route BuyPower events
+  async handleBuyPowerEvent(event: any) {
+    this.logger.log(`BuyPower event type: ${event?.event || event?.type}`);
+    this.logger.log('Full event:', JSON.stringify(event, null, 2));
 
-    if (!secret) {
-      this.logger.error('Paystack webhook secret not configured');
-      throw new Error('Missing Paystack webhook secret'); 
-    }
+    const eventType = event?.event || event?.type;
 
-    const hash = crypto
-      .createHmac('sha256', secret)
-      .update(rawBody)
-      .digest('hex');
-
-    return hash === signature;
-  }
-
-  async handleEvent(event: any) {
-    this.logger.log(`Webhook received: ${event.type}`);
-
-    switch (event.type) {
+    switch (eventType) {
+      case 'collection.successful':
       case 'account.credited':
-        return this.handleAccountCredited(event.data);
+      case 'transfer.credit':
+        return this.handleWalletFunding(event);
 
-      case 'transfer.successful':
-        return this.handleTransferSuccessful(event.data);
+      case 'transfer.debit':
+      case 'vend.successful':
+        return this.handleVendSuccess(event);
 
       default:
-        this.logger.warn(`Unhandled event: ${event.type}`);
+        this.logger.warn(`Unhandled BuyPower event: ${eventType}`);
+        return { received: true };
     }
   }
 
-  private async handleAccountCredited(data: any) {
-    const { reference, amount, userId } = data;
+  // ✅ Handle wallet funding — user sent money to virtual account
+  private async handleWalletFunding(event: any) {
+    // BuyPower sends different structures — handle all
+    const data      = event?.data || event;
+    const amount    = data?.amount    || data?.value;
+    const nuban     = data?.nuban     || data?.accountNumber || data?.account_number;
+    const reference = data?.reference || data?.sessionId     || data?.session_id || data?.id?.toString();
 
-    if (!reference) throw new BadRequestException('Missing reference');
+    this.logger.log(`Wallet funding event — nuban: ${nuban}, amount: ${amount}, ref: ${reference}`);
 
-    const tx = await this.prisma.transaction.findUnique({
-      where: { reference },
+    if (!amount || !nuban) {
+      this.logger.error('Missing amount or nuban in webhook', data);
+      return { received: true, error: 'Missing required fields' };
+    }
+
+    // Find user by NUBAN
+    const wallet = await this.prisma.wallet.findFirst({
+      where: {
+        OR: [
+          { virtualAccountNuban: nuban },
+          { virtual_account_ref: reference },
+        ],
+      },
+      include: { user: true },
     });
 
-    if (!tx) {
-      this.logger.warn(`Transaction not found: ${reference}`);
-      return;
+    if (!wallet) {
+      this.logger.warn(`No wallet found for NUBAN: ${nuban}`);
+      return { received: true, error: 'Wallet not found' };
     }
 
-    if (tx.status === 'SUCCESS') {
-      this.logger.warn(`Duplicate webhook ignored: ${reference}`);
-      return;
-    }
+    const userId = wallet.userId;
 
-
-    await this.walletService.credit(
+    // ✅ Credit wallet — idempotent via reference
+    const result = await this.walletService.creditFromWebhook(
       userId,
-      new Decimal(amount),
-      'Webhook credit',
+      Number(amount),
+      reference,
+      {
+        description: `Wallet funded via BuyPower MFB — ₦${amount}`,
+        metadata: { nuban, amount, reference, event },
+      },
     );
 
-    await this.prisma.transaction.update({
-      where: { reference },
-      data: { status: 'SUCCESS' },
-    });
+    if (result.duplicated) {
+      this.logger.warn(`Duplicate webhook ignored — ref: ${reference}`);
+      return { received: true, duplicated: true };
+    }
 
-    this.logger.log(`Wallet credited for ${userId} → ${amount}`);
+    // ✅ Send notification to user
+    await this.notificationService.notifyTransaction(
+      userId,
+      `💰 Your wallet has been credited with ₦${Number(amount).toLocaleString()}`,
+      { amount, reference, nuban },
+    );
+
+    this.logger.log(
+      `Wallet credited — userId: ${userId}, amount: ₦${amount}, ref: ${reference}`,
+    );
+
+    return { received: true, success: true };
   }
 
-  private async handleTransferSuccessful(data: any) {
-    const { reference, token } = data;
+  // ✅ Handle successful vend from webhook
+  private async handleVendSuccess(event: any) {
+    const data      = event?.data || event;
+    const reference = data?.reference || data?.orderId || data?.order_id;
+    const token     = data?.token;
 
-    const tx = await this.prisma.transaction.findUnique({
+    if (!reference) {
+      this.logger.warn('No reference in vend webhook');
+      return { received: true };
+    }
+
+    // Update vendor transaction
+    const vendorTx = await this.prisma.vendorTransaction.findFirst({
       where: { reference },
     });
 
-    if (!tx) {
-      this.logger.warn(`Transaction not found: ${reference}`);
-      return;
+    if (!vendorTx) {
+      this.logger.warn(`VendorTransaction not found for ref: ${reference}`);
+      return { received: true };
     }
 
-    if (tx.status === 'SUCCESS') {
-      this.logger.warn(`Duplicate webhook ignored: ${reference}`);
-      return;
+    if (vendorTx.status === 'SUCCESS') {
+      this.logger.warn(`Duplicate vend webhook ignored — ref: ${reference}`);
+      return { received: true, duplicated: true };
     }
 
-    await this.prisma.transaction.update({
+    await this.prisma.vendorTransaction.update({
       where: { reference },
       data: {
         status: 'SUCCESS',
-        metadata: {
-          ...(tx.metadata as any),
-          token,
-        },
+        token:  token,
+        responsePayload: data,
       },
     });
 
-    this.logger.log(`Electricity token delivered: ${reference}`);
-  }
-
-  async handleChargeSuccess(data: any) {
-    const reference = data.reference;
-    const amount = new Decimal(data.amount).div(100); 
-
-    this.logger.log(`Processing payment: ${reference}`);
-
-    const tx = await this.prisma.transaction.findUnique({
-      where: { reference },
-    });
-
-    if (!tx) {
-      this.logger.warn(`Transaction not found: ${reference}`);
-      return;
+    // Notify user
+    if (token) {
+      await this.notificationService.notifyElectricity(
+        vendorTx.userId,
+        `⚡ Electricity token ready: ${token}`,
+        { token, reference },
+      );
     }
 
-    if (tx.status === 'SUCCESS') {
-      this.logger.warn(`Duplicate webhook ignored: ${reference}`);
-      return;
-    }
-
-    await this.prisma.transaction.update({
-      where: { reference },
-      data: {
-        status: 'SUCCESS',
-        metadata: {
-          ...(tx.metadata as any),
-          paystackResponse: data,
-        },
-      },
-    });
-
-    
-    await this.walletService.credit(
-      tx.userId,
-      amount,
-      'Wallet funding via Paystack',
-    );
-
-    this.logger.log(`Wallet credited for ${reference}`);
-  }
-
-  async handlePaystackEvent(event: any) {
-    const { event: type, data } = event;
-
-    switch (type) {
-      case 'charge.success':
-        return this.handleChargeSuccess(data);
-
-      default:
-        this.logger.warn(`Unhandled Paystack event: ${type}`);
-        return;
-    }
+    this.logger.log(`Vend webhook processed — ref: ${reference}, token: ${token}`);
+    return { received: true, success: true };
   }
 }

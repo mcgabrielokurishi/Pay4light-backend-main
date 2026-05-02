@@ -1,58 +1,47 @@
+// src/webhook/webhook.controller.ts
 import {
   Controller,
   Post,
-  Req,
-  Res,
   Headers,
-  HttpStatus,
+  Body,
+  Req,
+  RawBodyRequest,
+  HttpCode,
+  Logger,
   BadRequestException,
 } from '@nestjs/common';
-import { Request, Response } from 'express';
+import { Request } from 'express';
 import { WebhookService } from './webhooks.service';
+import * as crypto from 'crypto';
 
-@Controller('webhook')
+@Controller('webhooks')
 export class WebhookController {
+  private readonly logger = new Logger(WebhookController.name);
+
   constructor(private readonly webhookService: WebhookService) {}
 
-  // BuyPower MFB webhook → POST /webhook/buypower
   @Post('buypower')
-  async handleBuypowerWebhook(
-    @Req() req: Request,
-    @Res() res: Response,
-    @Headers('x-buypower-signature') signature: string,
+  @HttpCode(200)
+  async handleBuyPower(
+    @Headers('x-payable-signature') signature: string,
+    @Body() body: any,
+    @Req() req: RawBodyRequest<Request>,
   ) {
-    const rawBody = (req as any).rawBody;
+    this.logger.log('BuyPower webhook received');
+    this.logger.log('Webhook body:', JSON.stringify(body, null, 2));
 
-    const isValid = this.webhookService.verifySignature(signature, rawBody);
+    // ✅ Verify signature
+    const rawBody = JSON.stringify(body);
+    const isValid = this.webhookService.verifyBuyPowerSignature(
+      signature,
+      rawBody,
+    );
 
     if (!isValid) {
-      throw new BadRequestException('Invalid BuyPower signature');
+      this.logger.error('Invalid BuyPower webhook signature');
+      throw new BadRequestException('Invalid signature');
     }
 
-    const event = req.body;
-    await this.webhookService.handleEvent(event);
-
-    return res.status(HttpStatus.OK).send('Webhook received');
-  }
-
-  // Paystack webhook → POST /webhook/paystack
-  @Post('paystack')
-  async handlePaystackWebhook(
-    @Req() req: Request,
-    @Res() res: Response,
-    @Headers('x-paystack-signature') signature: string,
-  ) {
-    const rawBody = (req as any).rawBody;
-
-    const isValid = this.webhookService.verifySignaturePayment(signature, rawBody);
-
-    if (!isValid) {
-      throw new BadRequestException('Invalid Paystack signature');
-    }
-
-    const event = req.body;
-    await this.webhookService.handlePaystackEvent(event);
-
-    return res.status(HttpStatus.OK).send('Webhook received');
+    return this.webhookService.handleBuyPowerEvent(body);
   }
 }

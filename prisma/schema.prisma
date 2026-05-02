@@ -48,7 +48,7 @@ model Notification {
   createdAt DateTime @default(now())
 
   userId String
-  user   User @relation(fields: [userId], references: [id])
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 
@@ -95,7 +95,7 @@ model OTP {
   verified  Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  user User? @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model User {
@@ -321,7 +321,7 @@ model Meter {
   isDefault   Boolean  @default(false)
   createdAt   DateTime @default(now())
 
-  user  User  @relation(fields: [userId], references: [id])
+  user  User  @relation(fields: [userId], references: [id],onDelete: Cascade)
   disco Disco @relation(fields: [discoId], references: [id])
 
   transactions Transaction[]
