@@ -1,33 +1,87 @@
-
+// src/payment/payment.controller.ts
 import {
-  Body,
-  Controller,
-  Post,
-  UseGuards,
-  Req,
-} from "@nestjs/common";
-import { ApiTags, ApiBearerAuth } from "@nestjs/swagger";
-import { PaymentsService } from "./payments.service";
-import { InitializePaymentDto } from "./dto/initialize-payment.dto";
-import { JwtAuthGuard } from "src/auth/jwt-auth.guard";
-import { WebhookService } from "src/webhooks/webhooks.service";
+  Controller, Post, Get, Delete,
+  Body, Param, Query,
+  UseGuards, Req, Headers,
+  HttpCode, BadRequestException, Logger,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { PaymentService } from './payments.service';
+import { InitializePaymentDto } from './dto/initialize-payment.dto';
+import * as crypto from 'crypto';
 
-@ApiTags("Payments")
-@ApiBearerAuth()
-@Controller("payments")
-export class PaymentsController {
-  WebhookService: any;
-  constructor(private readonly paymentsService: PaymentsService) {}
+@Controller('payment')
+export class PaymentController {
+  private readonly logger = new Logger(PaymentController.name);
 
-  @UseGuards(JwtAuthGuard)
-  @Post("initialize")
-  initialize(@Body() dto: InitializePaymentDto, @Req() req: any) {
-    const userId = req.user.userId;
-    return this.paymentsService.initializePayment(userId, dto);
+  constructor(private readonly paymentService: PaymentService) {}
+
+  // ─── INITIALIZE PAYMENT (get payment link) ───────────────────────
+  @Post('initialize')
+  @UseGuards(AuthGuard('jwt'))
+  async initializePayment(
+    @Req() req: any,
+    @Body() dto: InitializePaymentDto,
+  ) {
+    return this.paymentService.initializePayment(req.user.id, dto);
   }
-   @Post("paystack")
-handlePaystackWebhook(@Req() req: any) {
-  return this.WebhookService.handlePaystack(req.body);
-}
 
+  // ─── VERIFY PAYMENT (after redirect from Paystack) ───────────────
+  @Get('verify/:reference')
+  @UseGuards(AuthGuard('jwt'))
+  async verifyPayment(
+    @Req() req: any,
+    @Param('reference') reference: string,
+  ) {
+    return this.paymentService.verifyPayment(reference, req.user.id);
+  }
+
+  // ─── GET SAVED CARDS ─────────────────────────────────────────────
+  @Get('cards')
+  @UseGuards(AuthGuard('jwt'))
+  async getSavedCards(@Req() req: any) {
+    return this.paymentService.getSavedCards(req.user.id);
+  }
+
+  // ─── CHARGE SAVED CARD ───────────────────────────────────────────
+  @Post('cards/:cardId/charge')
+  @UseGuards(AuthGuard('jwt'))
+  async chargeCard(
+    @Req() req: any,
+    @Param('cardId') cardId: string,
+    @Body('amount') amount: number,
+  ) {
+    if (!amount || isNaN(amount)) {
+      throw new BadRequestException('Valid amount is required');
+    }
+    return this.paymentService.chargeCard(req.user.id, cardId, amount);
+  }
+
+  // ─── DELETE SAVED CARD ───────────────────────────────────────────
+  @Delete('cards/:cardId')
+  @UseGuards(AuthGuard('jwt'))
+  async deleteCard(@Req() req: any, @Param('cardId') cardId: string) {
+    return this.paymentService.deleteCard(req.user.id, cardId);
+  }
+
+  // ─── PAYSTACK WEBHOOK (no auth — public) ─────────────────────────
+  @Post('webhook/paystack')
+  @HttpCode(200)
+  async paystackWebhook(
+    @Headers('x-paystack-signature') signature: string,
+    @Body() body: any,
+  ) {
+    // Verify signature
+    const hash = crypto
+      .createHmac('sha256', process.env.PAYSTACK_WEBHOOK_SECRET!)
+      .update(JSON.stringify(body))
+      .digest('hex');
+
+    if (hash !== signature) {
+      this.logger.error('Invalid Paystack webhook signature');
+      throw new BadRequestException('Invalid signature');
+    }
+
+    return this.paymentService.handlePaystackWebhook(body);
+  }
 }

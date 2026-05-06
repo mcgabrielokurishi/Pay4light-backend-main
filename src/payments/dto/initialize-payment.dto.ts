@@ -1,13 +1,19 @@
-import { IsEmail, IsNumber, Min } from "class-validator";
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty } from '@nestjs/swagger';
+import { IsNumber, IsPositive, IsOptional, IsString, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class InitializePaymentDto {
-  @ApiProperty({ example: "user@gmail.com" })
-  @IsEmail()
-  email: string;
-
-  @ApiProperty({ example: 1000 })
+  @ApiProperty({
+    description : "amout to fund",
+    example : "2000"
+  })
   @IsNumber()
-  @Min(100)
-  amount: number;
+  @IsPositive()
+  @Min(100, { message: 'Minimum amount is ₦100' })
+  @Type(() => Number)
+  amount: number; // in Naira
+
+  @IsString()
+  @IsOptional()
+  callbackUrl?: string; // where to redirect after payment
 }

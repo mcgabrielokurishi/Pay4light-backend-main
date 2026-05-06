@@ -82,7 +82,22 @@ model VendorTransaction {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
+model SavedCard {
+  id                String   @id @default(cuid())
+  userId            String
+  authorizationCode String
+  cardType          String?
+  last4             String
+  expMonth          String?
+  expYear           String?
+  bank              String?
+  brand             String?
+  email             String
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
 model OTP {
   id        String   @id @default(uuid())
   userId    String?
