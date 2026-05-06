@@ -75,7 +75,23 @@ model Information {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 }
+model MeterUsageStats {
+  id                  String   @id @default(cuid())
+  userId              String
+  meterId             String
+  avgDailyUsage       Float    // average kWh per day
+  avgDaysBetweenBuys  Float    // average days between purchases
+  lastPurchaseDate    DateTime?
+  lastPurchaseUnits   Float?   // units from last purchase
+  forecastedRunOutAt  DateTime? // predicted expiry
+  daysRemaining       Int?
+  lastCalculatedAt    DateTime @default(now())
 
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meter Meter @relation(fields: [meterId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, meterId])
+}
 
 model VendorTransaction {
   id              String   @id @default(uuid())
@@ -163,6 +179,7 @@ model User {
   savedCards SavedCard[] 
   deviceToken DeviceToken[]
   pushNotification PushNotification[]
+  meterUsageStats MeterUsageStats[]
  
   disco Disco? @relation(fields: [discoId], references: [id])
 }
@@ -354,6 +371,7 @@ model Meter {
   user  User  @relation(fields: [userId], references: [id],onDelete: Cascade)
   disco Disco @relation(fields: [discoId], references: [id])
 
+  meterUsageStats MeterUsageStats[]
   transactions Transaction[]
 }
 

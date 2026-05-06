@@ -1,7 +1,15 @@
 // src/notification/dto/create-notification.dto.ts
-import { IsString, IsNotEmpty, IsEnum, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsEnum,
+  IsOptional,
+  ValidateNested,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { NotificationType } from '@prisma/client';
+import { Type } from 'class-transformer';
+import { NotificationMetadataDto } from './notification-metadata.dto';
 
 export class CreateNotificationDto {
   @ApiProperty({
@@ -36,4 +44,14 @@ export class CreateNotificationDto {
   @IsEnum(NotificationType)
   @IsOptional()
   type?: NotificationType;
+
+  // ✅ NEW FIELD
+  @ApiPropertyOptional({
+    description: 'Additional metadata for the notification',
+    type: NotificationMetadataDto,
+  })
+  @ValidateNested()
+  @Type(() => NotificationMetadataDto)
+  @IsOptional()
+  metadata?: NotificationMetadataDto;
 }

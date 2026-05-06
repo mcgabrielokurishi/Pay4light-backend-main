@@ -19,8 +19,12 @@ import { NotificationModule } from "./notification/notification.module";
 import { BankModule } from "./bank/bank.module";
 import { PushNotificationModule } from "./push-notification/push-notification.module";
 import { InformationModule } from "./information/information.module";
+import { ForecastModule } from "./forcast/forcast.module";
+import { ScheduleModule } from "@nestjs/schedule";
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
+    ForecastModule,
     PrismaModule,
     AuthModule,
     WalletModule,
