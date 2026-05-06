@@ -17,6 +17,7 @@ import { DiscoModule } from "./disco/disco.module";
 import { BuypowerModule } from "./buypower/buypower.module";
 import { NotificationModule } from "./notification/notification.module";
 import { BankModule } from "./bank/bank.module";
+import { PushNotificationModule } from "./push-notification/push-notification.module";
 import { InformationModule } from "./information/information.module";
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { InformationModule } from "./information/information.module";
     UsersModule,
     BankAccountModule,
     CardModule,
+    PushNotificationModule,
     BankModule,
     AccountModule,
     PaymentModule,

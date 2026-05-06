@@ -15,6 +15,17 @@ enum NotificationType {
   ELECTRICITY
   SYSTEM
 }
+enum Platform {
+  ANDROID
+  IOS
+  WEB
+}
+
+enum PushStatus {
+  PENDING
+  SENT
+  FAILED
+}
 
 enum InfoCategory {
   GENERAL
@@ -39,6 +50,7 @@ model Device {
 
   @@unique([userId, deviceId])
 }
+
 model Notification {
   id        String   @id @default(uuid())
   type      String
@@ -146,9 +158,12 @@ model User {
   devices              Device[]
   meters               Meter[]
   notifications Notification[]
-  bankAccounts         BankAccount[]       // NEW
-  cards                Card[]              // NEW
-
+  bankAccounts         BankAccount[]       
+  cards                Card[]              
+  savedCards SavedCard[] 
+  deviceToken DeviceToken[]
+  pushNotification PushNotification[]
+ 
   disco Disco? @relation(fields: [discoId], references: [id])
 }
 
@@ -356,3 +371,29 @@ model Disco {
   meters Meter[]
   users  User[]
 }
+model DeviceToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  Platform @default(ANDROID)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PushNotification {
+  id        String               @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  data      Json?
+  type      NotificationType     @default(INFO)
+  status    PushStatus           @default(PENDING)
+  sentAt    DateTime?
+  createdAt DateTime             @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+

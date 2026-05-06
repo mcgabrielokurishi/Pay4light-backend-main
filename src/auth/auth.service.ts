@@ -14,6 +14,7 @@ import { RefreshDto } from "./dto/refresh.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { OtpService } from "./OTP/otp.service";
 import { OtpPurpose } from "./OTP/dto/send-otp.dto";
+import { PushNotificationService } from "src/push-notification/push-notification.service";
 import { hashOTP } from "./OTP/otp.util";
 import { ForgotPasswordDto } from "./dto/forgotten-password.dto";
 import { VerifyForgotPasswordDto } from "./dto/verify-forgot-password.dto";
@@ -26,6 +27,7 @@ export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private MAX_FAILED_ATTEMPTS = 5;
   private LOCK_TIME_MINUTES = 15;
+  
 
   // Temporary in-memory store for pending registrations
   private pendingRegistrations = new Map<string, {
@@ -48,6 +50,7 @@ export class AuthService {
     private jwtService: JwtService,
     private otpService: OtpService,
      private walletService: WalletService,
+     private push : PushNotificationService,
   ) {}
 
   // ─── REGISTER ───────────────────────────────────────────────────
@@ -339,6 +342,9 @@ export class AuthService {
         'New password cannot be the same as your current password',
       );
     }
+
+    // After password reset:
+    await this.push.notifyPasswordChanged(user.id);
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 

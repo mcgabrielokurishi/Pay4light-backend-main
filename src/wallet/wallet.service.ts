@@ -8,6 +8,7 @@ import {
 import { PrismaService } from "database/prisma.service";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
+import { PushNotificationService } from "src/push-notification/push-notification.service";
 import { BuypowerService } from "../buypower/buypower.service";
 
 @Injectable()
@@ -17,6 +18,8 @@ export class WalletService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly buypowerService: BuypowerService,
+    private readonly push:      PushNotificationService,
+    
   ) {}
  
   // CREATE WALLET
@@ -228,6 +231,8 @@ if (!nuban) {
         },
       });
 
+      await this.push.notifyWalletCredited(userId, amount.toNumber());
+    
       return { wallet: updatedWallet, transaction };
     });
   }
@@ -313,5 +318,8 @@ if (!nuban) {
 
       return { wallet: updatedWallet, transaction, duplicated: false };
     });
+    await this.push.notifyWalletDebited(userId, amount.toNumber());
+
+    
   }
 }

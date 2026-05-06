@@ -15,6 +15,7 @@ import {NotificationService} from 'src/notification/notification.service';
 import { VendElectricityDto } from './dto/vend-electricity.dto';
 import { VendTvDto } from './dto/vend-tv.dto';
 import { VendDataDto } from './dto/vend-data.dto';
+import { PushNotificationService } from 'src/push-notification/push-notification.service';
 
 @Injectable()
 export class VendingService {
@@ -29,6 +30,7 @@ export class VendingService {
     private readonly prisma: PrismaService,
     private readonly walletService: WalletService,
     private readonly notificationService: NotificationService,
+    private readonly push: PushNotificationService,
   ) {
     this.baseUrl = this.configService.get<string>('BUYPOWER_BASE_URL') || 'https://idev.buypower.ng';
     this.apiKey  = this.configService.get<string>('BUYPOWER_API_KEY')  || '';
@@ -207,6 +209,12 @@ export class VendingService {
             debtRemaining:  vendData?.debtRemaining,
           },
         };
+            await this.push.notifyElectricityPurchased(
+              userId,
+              vendData?.token,
+              vendData?.units,
+              dto.amount,
+    );
       }
 
       // ─── FAILED ─────────────────────────────────────────────────
