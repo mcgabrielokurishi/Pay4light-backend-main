@@ -368,7 +368,8 @@ model Meter {
   isDefault   Boolean  @default(false)
   createdAt   DateTime @default(now())
 
-  user  User  @relation(fields: [userId], references: [id],onDelete: Cascade)
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   disco Disco @relation(fields: [discoId], references: [id])
 
   meterUsageStats MeterUsageStats[]
