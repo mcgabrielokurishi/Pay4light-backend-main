@@ -32,8 +32,8 @@ export class VendingService {
     private readonly notificationService: NotificationService,
     private readonly push: PushNotificationService,
   ) {
-    this.baseUrl = this.configService.get<string>('BUYPOWER_BASE_URL') || 'https://idev.buypower.ng';
-    this.apiKey  = this.configService.get<string>('BUYPOWER_API_KEY')  || '';
+    this.baseUrl = this.configService.get<string>('BUYPOWER_BASE_URL_FOR_METER_VEND') || 'https://api.buypower.ng/v2';
+    this.apiKey  = this.configService.get<string>('BUYPOWER_API_KEY_FOR_METER_VEND')  || '27bbb1199a0efa41c81261a2314bf9faa90ff404a8d7e6ee20992e117c3e83df';
   }
 
   private get headers() {
@@ -49,10 +49,10 @@ export class VendingService {
     try {
       const response = await firstValueFrom(
         this.httpService.get(
-          `${this.baseUrl}/v2/request`,
+          `${this.baseUrl}/v2/check/meter`,
           {
             headers: this.headers,
-            params: { meter, disco, vendType, vertical: 'ELECTRICITY' },
+            params: { meter, disco, vendType, vertical: 'ELECTRICITY',orderid: "false" },
           },
         ),
       );
@@ -71,7 +71,7 @@ export class VendingService {
     try {
       const response = await firstValueFrom(
         this.httpService.get(
-          `${this.baseUrl}/v2/discos/status`,
+          `${this.baseUrl}/discos/status`,
           { headers: this.headers },
         ),
       );
@@ -133,7 +133,7 @@ export class VendingService {
       // Call BuyPower vend endpoint
       const response = await firstValueFrom(
         this.httpService.post(
-          `${this.baseUrl}/v2/vend`,
+          `${this.baseUrl}/vend`,
           {
             orderId,
             meter:       dto.meter,
