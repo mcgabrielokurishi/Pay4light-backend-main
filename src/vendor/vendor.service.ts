@@ -88,13 +88,7 @@ export class VendingService {
     const reference = orderId;
 
     // Check DISCO is online first
-    const discoStatus = await this.checkDiscoStatus();
-    if (discoStatus[dto.disco] === false) {
-      throw new BadRequestException(
-        `${dto.disco} is currently unavailable. Please try again later.`,
-      );
-    }
-
+    
     // Get user info for name/email
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
