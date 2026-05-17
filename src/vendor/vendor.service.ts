@@ -32,7 +32,7 @@ export class VendingService {
     private readonly notificationService: NotificationService,
     private readonly push: PushNotificationService,
   ) {
-    this.baseUrl = this.configService.get<string>('BUYPOWER_BASE_URL_FOR_METER_VEND') || 'https://api.buypower.ng/v2';
+    this.baseUrl = this.configService.get<string>('BUYPOWER_BASE_URL_FOR_METER_VEND') || 'https://api.buypower.ng';
     this.apiKey  = this.configService.get<string>('BUYPOWER_API_KEY_FOR_METER_VEND')  || '27bbb1199a0efa41c81261a2314bf9faa90ff404a8d7e6ee20992e117c3e83df';
   }
 
@@ -88,13 +88,7 @@ export class VendingService {
     const reference = orderId;
 
     // Check DISCO is online first
-    const discoStatus = await this.checkDiscoStatus();
-    if (discoStatus[dto.disco] === false) {
-      throw new BadRequestException(
-        `${dto.disco} is currently unavailable. Please try again later.`,
-      );
-    }
-
+    
     // Get user info for name/email
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -133,7 +127,7 @@ export class VendingService {
       // Call BuyPower vend endpoint
       const response = await firstValueFrom(
         this.httpService.post(
-          `${this.baseUrl}/vend`,
+          `${this.baseUrl}/v2/vend`,
           {
             orderId,
             meter:       dto.meter,
