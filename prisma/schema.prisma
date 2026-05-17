@@ -6,6 +6,10 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+enum Role {
+  USER
+  ADMIN
+}
 
 enum NotificationType {
   INFO
@@ -109,6 +113,7 @@ model VendorTransaction {
   externalRef     String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
 }
 model SavedCard {
   id                String   @id @default(cuid())
@@ -171,6 +176,8 @@ model User {
   electricityPurchases ElectricityPurchase[]
   conversations        AIConversation[]
   otps                 OTP[]
+  role Role @default(USER)
+  vendorTransactions VendorTransaction[]
   devices              Device[]
   meters               Meter[]
   notifications Notification[]
