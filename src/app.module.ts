@@ -32,7 +32,7 @@ import { RequeryModule } from "./requery/requery.module";
     WalletModule,
     TransactionsModule,
     UsersModule,
-    // AdminModule,
+    AdminModule,
     BankAccountModule,
     CardModule,
     PushNotificationModule,
