@@ -1,15 +1,28 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Role } from '@prisma/client';
+
 const prisma = new PrismaClient();
 
 async function main() {
-  await prisma.user.update({
-    where: { email: 'your-email@gmail.com' },
-    data:  { role: 'ADMIN' },
+  const email = process.env.ADMIN_EMAIL!;
+
+  await prisma.user.upsert({
+    where: { email },
+    update: {
+      role: Role.ADMIN,
+    },
+    create: {
+      email,
+      password: 'temporary-password',
+      fullName: 'Super Admin',
+      role: Role.ADMIN,
+    },
   });
-  console.log(' Admin role granted');
+
+  console.log('Admin setup complete');
 }
 
-main().finally(() => prisma.$disconnect());
-
-
-
+main()
+  .catch(console.error)
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
