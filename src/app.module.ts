@@ -14,6 +14,7 @@ import { BankAccountModule } from "./bankAccount/bank-account.module";
 import { CardModule } from "./card/card.module";
 import { AccountModule } from "./account/account.module";
 import { DiscoModule } from "./disco/disco.module";
+import { AdminModule } from "./admin/admin.module";
 import { BuypowerModule } from "./buypower/buypower.module";
 import { NotificationModule } from "./notification/notification.module";
 import { BankModule } from "./bank/bank.module";
@@ -21,6 +22,7 @@ import { PushNotificationModule } from "./push-notification/push-notification.mo
 import { InformationModule } from "./information/information.module";
 import { ForecastModule } from "./forcast/forcast.module";
 import { ScheduleModule } from "@nestjs/schedule";
+import { RequeryModule } from "./requery/requery.module";
 @Module({
   imports: [
     ScheduleModule.forRoot(),
@@ -30,11 +32,13 @@ import { ScheduleModule } from "@nestjs/schedule";
     WalletModule,
     TransactionsModule,
     UsersModule,
+    AdminModule,
     BankAccountModule,
     CardModule,
     PushNotificationModule,
     BankModule,
     AccountModule,
+    RequeryModule,
     PaymentModule,
     InformationModule,
     NotificationModule,
