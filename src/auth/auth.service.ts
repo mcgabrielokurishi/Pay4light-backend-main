@@ -11,6 +11,7 @@ import * as bcrypt from "bcrypt";
 import { JwtService } from "@nestjs/jwt";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { OtpService } from "./OTP/otp.service";
 import { OtpPurpose } from "./OTP/dto/send-otp.dto";
@@ -310,6 +311,40 @@ export class AuthService {
 
   // ─── RESET PASSWORD — 
 
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+  const user = await this.prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new BadRequestException('User not found');
+
+  // Verify current password
+  const isValid = await bcrypt.compare(dto.currentPassword, user.password);
+  if (!isValid) throw new UnauthorizedException('Current password is incorrect');
+
+  // Prevent same password
+  const isSame = await bcrypt.compare(dto.newPassword, user.password);
+  if (isSame) {
+    throw new BadRequestException(
+      'New password cannot be the same as current password',
+    );
+  }
+
+  const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
+
+  await this.prisma.user.update({
+    where: { id: userId },
+    data:  { password: hashedPassword },
+  });
+
+  // Revoke all other sessions — force re-login on other devices
+  await this.prisma.refreshToken.updateMany({
+    where: { userId, revoked: false },
+    data:  { revoked: true },
+  });
+
+  return {
+    success: true,
+    message: 'Password changed successfully. Please log in again.',
+  };
+}
   async resetPassword(dto: ResetPasswordDto) {
     const { resetToken, newPassword } = dto;
 

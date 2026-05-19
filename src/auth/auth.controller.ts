@@ -4,6 +4,8 @@ import {
   Body,
   HttpCode,
   HttpStatus,
+  Req,
+  UseGuards,
 } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { AuthService } from "./auth.service";
@@ -12,9 +14,11 @@ import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
 import { ForgotPasswordDto } from "./dto/forgotten-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { VerifyOtpDto } from "./OTP/dto/verify-otp.dto";
 import { VerifyForgotPasswordDto } from "./dto/verify-forgot-password.dto";
+import { AuthGuard } from "@nestjs/passport";
 
 @ApiTags('Auth')
 @Controller("auth")
@@ -80,5 +84,10 @@ async verifyForgotPassword(@Body() dto: VerifyForgotPasswordDto) {
 async resetPassword(@Body() dto: ResetPasswordDto) {
   return this.authService.resetPassword(dto);
 }
-
+@Post('change-password')
+@UseGuards(AuthGuard('jwt'))
+@HttpCode(HttpStatus.OK)
+async changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
+  return this.authService.changePassword(req.user.id, dto);
+}
 }

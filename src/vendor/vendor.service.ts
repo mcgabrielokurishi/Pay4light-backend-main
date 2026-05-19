@@ -1,3 +1,5 @@
+
+
 import {
   Injectable,
   Logger,
@@ -11,7 +13,7 @@ import { WalletService } from 'src/wallet/wallet.service';
 import { firstValueFrom } from 'rxjs';
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
-import {NotificationService} from 'src/notification/notification.service';
+import { NotificationService } from 'src/notification/notification.service';
 import { VendElectricityDto } from './dto/vend-electricity.dto';
 import { VendTvDto } from './dto/vend-tv.dto';
 import { VendDataDto } from './dto/vend-data.dto';
@@ -19,21 +21,20 @@ import { PushNotificationService } from 'src/push-notification/push-notification
 
 @Injectable()
 export class VendingService {
-  private readonly logger = new Logger(VendingService.name);
+  private readonly logger  = new Logger(VendingService.name);
   private readonly baseUrl: string;
-  private readonly apiKey: string;
-  
+  private readonly apiKey:  string;
 
   constructor(
-    private readonly httpService: HttpService,
-    private readonly configService: ConfigService,
-    private readonly prisma: PrismaService,
-    private readonly walletService: WalletService,
-    private readonly notificationService: NotificationService,
-    private readonly push: PushNotificationService,
+    private readonly httpService:          HttpService,
+    private readonly configService:        ConfigService,
+    private readonly prisma:               PrismaService,
+    private readonly walletService:        WalletService,
+    private readonly notificationService:  NotificationService,
+    private readonly push:                 PushNotificationService,
   ) {
     this.baseUrl = this.configService.get<string>('BUYPOWER_BASE_URL_FOR_METER_VEND') || 'https://api.buypower.ng';
-    this.apiKey  = this.configService.get<string>('BUYPOWER_API_KEY_FOR_METER_VEND')  || '27bbb1199a0efa41c81261a2314bf9faa90ff404a8d7e6ee20992e117c3e83df';
+    this.apiKey  = this.configService.get<string>('BUYPOWER_API_KEY_FOR_METER_VEND')  || '';
   }
 
   private get headers() {
@@ -42,9 +43,8 @@ export class VendingService {
       'Content-Type': 'application/json',
     };
   }
-  
 
-  //CHECK METER
+  // ─── CHECK METER ──────────────────────────────────────────────────
   async checkMeter(meter: string, disco: string, vendType: string) {
     try {
       const response = await firstValueFrom(
@@ -52,7 +52,7 @@ export class VendingService {
           `${this.baseUrl}/v2/check/meter`,
           {
             headers: this.headers,
-            params: { meter, disco, vendType, vertical: 'ELECTRICITY',orderid: "false" },
+            params:  { meter, disco, vendType, vertical: 'ELECTRICITY', orderid: 'false' },
           },
         ),
       );
@@ -66,7 +66,7 @@ export class VendingService {
     }
   }
 
-  //  CHECK DISCO STATUS 
+  // ─── CHECK DISCO STATUS ───────────────────────────────────────────
   async checkDiscoStatus() {
     try {
       const response = await firstValueFrom(
@@ -81,17 +81,72 @@ export class VendingService {
     }
   }
 
-  // VEND ELECTRICITY 
+  // ─── GET BUYPOWER WALLET BALANCE ─────────────────────────────────
+  // Uses the correct URL: https://idev.buypower.ng/v2/wallet/balance
+  async getBuyPowerBalance(): Promise<number> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(
+          `${this.baseUrl}/v2/wallet/balance`, // ✅ correct endpoint
+          { headers: this.headers },
+        ),
+      );
+
+      const balance = response.data?.balance ?? 0;
+      this.logger.log(`BuyPower wallet balance: ${balance}`);
+      return Number(balance);
+
+    } catch (error) {
+      const axiosError = error as any;
+      this.logger.error(
+        'Failed to fetch BuyPower balance:',
+        axiosError?.response?.data,
+      );
+      // Don't block vending if balance check fails — log and continue
+      return 999999;
+    }
+  }
+
+  // ─── VEND ELECTRICITY ─────────────────────────────────────────────
   async vendElectricity(userId: string, dto: VendElectricityDto) {
     const orderId   = randomUUID();
     const amount    = new Prisma.Decimal(dto.amount.toString());
     const reference = orderId;
 
-    // Check DISCO is online first
-    
-    // Get user info for name/email
+    // ✅ CHECK 1 — User wallet balance
+    const userWallet = await this.prisma.wallet.findUnique({
+      where: { userId },
+    });
+
+    if (!userWallet) {
+      throw new BadRequestException('Wallet not found');
+    }
+
+    if (userWallet.locked) {
+      throw new BadRequestException('Your wallet is locked. Contact support.');
+    }
+
+    if (Number(userWallet.balance) < dto.amount) {
+      throw new BadRequestException(
+        `Insufficient wallet balance. Your balance is ₦${Number(userWallet.balance).toLocaleString()} but you need ₦${dto.amount.toLocaleString()}. Please fund your wallet.`,
+      );
+    }
+
+    // ✅ CHECK 2 — BuyPower company wallet balance
+    const bpBalance = await this.getBuyPowerBalance();
+
+    if (bpBalance < dto.amount) {
+      this.logger.warn(
+        `BuyPower balance too low — bp: ${bpBalance}, needed: ${dto.amount}`,
+      );
+      throw new BadRequestException(
+        'Service temporarily unavailable. Please try again in a few minutes.',
+      );
+    }
+
+    // Get user info
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where:  { id: userId },
       select: { email: true, fullName: true, firstName: true, lastName: true },
     });
 
@@ -106,16 +161,16 @@ export class VendingService {
       data: {
         userId,
         reference,
-        provider: 'BUYPOWER',
-        serviceType: 'ELECTRICITY',
-        meterID: dto.meter,
-        amount : amount.toNumber(),
-        status: 'PENDING',
+        provider:       'BUYPOWER',
+        serviceType:    'ELECTRICITY',
+        meterID:        dto.meter,
+        amount:         amount.toNumber(),
+        status:         'PENDING',
         requestPayload: JSON.parse(JSON.stringify(dto)),
       },
     });
 
-    // Debit wallet BEFORE calling BuyPower (idempotent)
+    // Debit wallet
     await this.walletService.debitWithIdempotency(
       userId,
       amount,
@@ -124,7 +179,6 @@ export class VendingService {
     );
 
     try {
-      // Call BuyPower vend endpoint
       const response = await firstValueFrom(
         this.httpService.post(
           `${this.baseUrl}/v2/vend`,
@@ -147,24 +201,24 @@ export class VendingService {
       const data         = response.data;
       const responseCode = data?.responseCode ?? data?.data?.responseCode;
 
-      // ─── PENDING (202 / 500 / 502 / 503) — re-query later ──────
+      // PENDING
       if ([202, 500, 502, 503].includes(responseCode)) {
         this.logger.warn(`Vend pending — orderId: ${orderId}`);
         await this.prisma.vendorTransaction.update({
           where: { reference },
-          data: { status: 'PENDING', responsePayload: data },
+          data:  { status: 'PENDING', responsePayload: data },
         });
 
         return {
-          success: false,
-          pending: true,
-          message: 'Transaction is being processed. Please check back shortly.',
+          success:   false,
+          pending:   true,
+          message:   'Transaction is being processed. Please check back shortly.',
           orderId,
           reference,
         };
       }
 
-      // ─── SUCCESS (200) ──────────────────────────────────────────
+      // SUCCESS
       if (data?.status === true && responseCode === 200) {
         const vendData = data.data;
 
@@ -178,67 +232,70 @@ export class VendingService {
           },
         });
 
-        this.logger.log(`Electricity vended — orderId: ${orderId}, token: ${vendData?.token}`);
-
-        await this.notificationService.notifyElectricity(
-          userId,
-          `✅ Electricity purchased! Token: ${vendData?.token}. Units: ${vendData?.units} kWh`,
-          { token: vendData?.token, units: vendData?.units, orderId },
+        this.logger.log(
+          `Electricity vended — orderId: ${orderId}, token: ${vendData?.token}`,
         );
 
+        // ✅ Notifications — both in-app and push
+        await Promise.all([
+          this.notificationService.notifyElectricity(
+            userId,
+            `✅ Electricity purchased! Token: ${vendData?.token}. Units: ${vendData?.units} kWh`,
+            { token: vendData?.token, units: vendData?.units, orderId },
+          ),
+          this.push.notifyElectricityPurchased(
+            userId,
+            vendData?.token,
+            vendData?.units,
+            dto.amount,
+          ),
+        ]);
+
         return {
-          success:      true,
-          message:      'Electricity purchased successfully',
+          success: true,
+          message: 'Electricity purchased successfully',
           data: {
             orderId,
             reference,
-            token:          vendData?.token,
-            units:          vendData?.units,
-            amountPaid:     vendData?.totalAmountPaid,
+            token:           vendData?.token,
+            units:           vendData?.units,
+            amountPaid:      vendData?.totalAmountPaid,
             amountGenerated: vendData?.amountGenerated,
-            tax:            vendData?.tax,
-            receiptNo:      vendData?.receiptNo,
-            disco:          vendData?.disco,
-            debtAmount:     vendData?.debtAmount,
-            debtRemaining:  vendData?.debtRemaining,
+            tax:             vendData?.tax,
+            receiptNo:       vendData?.receiptNo,
+            disco:           vendData?.disco,
+            debtAmount:      vendData?.debtAmount,
+            debtRemaining:   vendData?.debtRemaining,
           },
         };
-            await this.push.notifyElectricityPurchased(
-              userId,
-              vendData?.token,
-              vendData?.units,
-              dto.amount,
-    );
       }
 
-      // ─── FAILED ─────────────────────────────────────────────────
       throw new Error(data?.message || 'Vending failed');
 
     } catch (error) {
-      const axiosError  = error as any;
-      const errorData   = axiosError?.response?.data;
-      const errorMsg    = errorData?.message || axiosError?.message || 'Vending failed';
+      const axiosError   = error as any;
+      const errorData    = axiosError?.response?.data;
+      const errorMsg     = errorData?.message || axiosError?.message || 'Vending failed';
       const responseCode = errorData?.responseCode;
 
       this.logger.error(`Vending failed — orderId: ${orderId}`, errorData);
 
-      // If pending response code — don't refund, re-query later
       if ([202, 500, 502, 503].includes(responseCode)) {
         await this.prisma.vendorTransaction.update({
           where: { reference },
-          data: { status: 'PENDING', responsePayload: errorData },
+          data:  { status: 'PENDING', responsePayload: errorData },
         });
 
         return {
-          success: false,
-          pending: true,
-          message: 'Transaction is being processed. Please re-query after 2 minutes.',
+          success:   false,
+          pending:   true,
+          message:   'Transaction is being processed. Re-query after 2 minutes.',
           orderId,
           reference,
         };
       }
 
-      // Definite failure — refund wallet
+      // Refund wallet
       await this.walletService.credit(
         userId,
         amount,
@@ -247,7 +304,7 @@ export class VendingService {
 
       await this.prisma.vendorTransaction.update({
         where: { reference },
-        data: { status: 'FAILED', responsePayload: errorData || errorMsg },
+        data:  { status: 'FAILED', responsePayload: errorData || errorMsg },
       });
 
       throw new BadRequestException(
@@ -256,14 +313,24 @@ export class VendingService {
     }
   }
 
-  // ─── VEND TV 
+  // ─── VEND TV ─────────────────────────────────────────────────────
   async vendTv(userId: string, dto: VendTvDto) {
     const orderId   = randomUUID();
     const amount    = new Prisma.Decimal(dto.amount.toString());
     const reference = orderId;
 
+    // ✅ Check user wallet balance
+    const userWallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!userWallet) throw new BadRequestException('Wallet not found');
+    if (userWallet.locked) throw new BadRequestException('Wallet is locked');
+    if (Number(userWallet.balance) < dto.amount) {
+      throw new BadRequestException(
+        `Insufficient balance. You have ₦${Number(userWallet.balance).toLocaleString()} but need ₦${dto.amount.toLocaleString()}`,
+      );
+    }
+
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where:  { id: userId },
       select: { email: true, fullName: true },
     });
 
@@ -271,11 +338,11 @@ export class VendingService {
       data: {
         userId,
         reference,
-        provider:    'BUYPOWER',
-        serviceType: 'TV',
-        meterID:     dto.meter,
-        amount : amount.toNumber(),
-        status:      'PENDING',
+        provider:       'BUYPOWER',
+        serviceType:    'TV',
+        meterID:        dto.meter,
+        amount:         amount.toNumber(),
+        status:         'PENDING',
         requestPayload: JSON.parse(JSON.stringify(dto)),
       },
     });
@@ -310,7 +377,7 @@ export class VendingService {
       if (data?.status === true && data?.responseCode === 200) {
         await this.prisma.vendorTransaction.update({
           where: { reference },
-          data: { status: 'SUCCESS', responsePayload: data },
+          data:  { status: 'SUCCESS', responsePayload: data },
         });
 
         return {
@@ -339,21 +406,33 @@ export class VendingService {
 
       await this.prisma.vendorTransaction.update({
         where: { reference },
-        data: { status: 'FAILED', responsePayload: errorMsg },
+        data:  { status: 'FAILED', responsePayload: errorMsg },
       });
 
-      throw new BadRequestException(`TV vending failed. Wallet refunded. Reason: ${errorMsg}`);
+      throw new BadRequestException(
+        `TV vending failed. Wallet refunded. Reason: ${errorMsg}`,
+      );
     }
   }
 
-  // ─── VEND DATA
+  // ─── VEND DATA ────────────────────────────────────────────────────
   async vendData(userId: string, dto: VendDataDto) {
     const orderId   = randomUUID();
     const amount    = new Prisma.Decimal(dto.amount.toString());
     const reference = orderId;
 
+    // ✅ Check user wallet balance
+    const userWallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!userWallet) throw new BadRequestException('Wallet not found');
+    if (userWallet.locked) throw new BadRequestException('Wallet is locked');
+    if (Number(userWallet.balance) < dto.amount) {
+      throw new BadRequestException(
+        `Insufficient balance. You have ₦${Number(userWallet.balance).toLocaleString()} but need ₦${dto.amount.toLocaleString()}`,
+      );
+    }
+
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where:  { id: userId },
       select: { email: true, fullName: true },
     });
 
@@ -361,11 +440,11 @@ export class VendingService {
       data: {
         userId,
         reference,
-        provider:    'BUYPOWER',
-        serviceType: 'DATA',
-        meterID:     dto.meter,
-        amount : amount.toNumber(),
-        status:      'PENDING',
+        provider:       'BUYPOWER',
+        serviceType:    'DATA',
+        meterID:        dto.meter,
+        amount:         amount.toNumber(),
+        status:         'PENDING',
         requestPayload: JSON.parse(JSON.stringify(dto)),
       },
     });
@@ -400,7 +479,7 @@ export class VendingService {
       if (data?.status === true && data?.responseCode === 200) {
         await this.prisma.vendorTransaction.update({
           where: { reference },
-          data: { status: 'SUCCESS', responsePayload: data },
+          data:  { status: 'SUCCESS', responsePayload: data },
         });
 
         return {
@@ -430,19 +509,21 @@ export class VendingService {
 
       await this.prisma.vendorTransaction.update({
         where: { reference },
-        data: { status: 'FAILED', responsePayload: errorMsg },
+        data:  { status: 'FAILED', responsePayload: errorMsg },
       });
 
-      throw new BadRequestException(`Data vending failed. Wallet refunded. Reason: ${errorMsg}`);
+      throw new BadRequestException(
+        `Data vending failed. Wallet refunded. Reason: ${errorMsg}`,
+      );
     }
   }
 
-  // ─── RE-QUERY ───────────────────────────────────────────────────
+  // ─── RE-QUERY ─────────────────────────────────────────────────────
   async reQuery(orderId: string) {
     try {
       const response = await firstValueFrom(
         this.httpService.get(
-          `${this.baseUrl}/v2/transaction/${orderId}`,
+          `${this.baseUrl}/v2/vend?orderId=${orderId}&getLastResponse=true`,
           { headers: this.headers },
         ),
       );
@@ -450,14 +531,13 @@ export class VendingService {
       const data     = response.data?.result ?? response.data;
       const vendData = data?.data;
 
-      // Update local transaction
       if (vendData?.responseCode === 100 || data?.status === true) {
         await this.prisma.vendorTransaction.updateMany({
           where: { reference: orderId },
           data: {
-            status: 'SUCCESS',
-            token:  vendData?.token,
-            units:  vendData?.units?.toString(),
+            status:          'SUCCESS',
+            token:           vendData?.token,
+            units:           vendData?.units?.toString(),
             responsePayload: data,
           },
         });
@@ -467,6 +547,7 @@ export class VendingService {
         success: data?.status ?? false,
         data:    vendData,
       };
+
     } catch (error) {
       const axiosError = error as any;
       throw new BadRequestException(
@@ -475,7 +556,7 @@ export class VendingService {
     }
   }
 
-  // ─── GET PRICE LIST ─────────────────────────────────────────────
+  // ─── GET PRICE LIST ───────────────────────────────────────────────
   async getPriceList(vertical: string, disco?: string) {
     try {
       const response = await firstValueFrom(
@@ -483,28 +564,13 @@ export class VendingService {
           `${this.baseUrl}/v2/prices`,
           {
             headers: this.headers,
-            params: { vertical, ...(disco ? { disco } : {}) },
+            params:  { vertical, ...(disco ? { disco } : {}) },
           },
         ),
       );
       return response.data;
     } catch (error) {
       throw new BadRequestException('Failed to fetch price list');
-    }
-  }
-
-  // ─── GET BUYPOWER WALLET BALANCE ────────────────────────────────
-  async getBuyPowerBalance() {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.get(
-          `${this.baseUrl}/v2/wallet/balance`,
-          { headers: this.headers },
-        ),
-      );
-      return response.data;
-    } catch (error) {
-      throw new BadRequestException('Failed to fetch BuyPower balance');
     }
   }
 }
