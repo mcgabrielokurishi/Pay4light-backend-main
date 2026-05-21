@@ -10,7 +10,7 @@ import { NotificationSettingsModule } from "src/notification-settings/notificati
 import { PushNotificationModule } from "src/push-notification/push-notification.module";
 
 @Module({
-  imports: [PrismaModule,NotificationModule,NotificationModule, AuthModule,PushNotificationModule, BuypowerModule,forwardRef(() => AuthModule)],
+  imports: [PrismaModule,NotificationModule,NotificationSettingsModule, AuthModule,PushNotificationModule, BuypowerModule,forwardRef(() => AuthModule)],
   controllers: [WalletController],
   providers: [WalletService],
   exports: [WalletService],
