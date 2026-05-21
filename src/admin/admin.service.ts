@@ -154,7 +154,7 @@ export class AdminService {
           },
           _count: {
             select: {
-              Meter:        true,
+              meters:       true,
               transactions: true,
             },
           },
@@ -184,7 +184,7 @@ export class AdminService {
       where:  { id: userId },
       include: {
         wallet: true,
-        Meter:  { include: { disco: true } },
+        meters: { include: { disco: true } },
         transactions: {
           orderBy: { createdAt: 'desc' },
           take:    10,

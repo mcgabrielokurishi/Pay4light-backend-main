@@ -26,7 +26,7 @@ export class CreateInformationDto {
   @ApiPropertyOptional({
     description: 'Category of the information',
     enum: InfoCategory,
-    example: InfoCategory.NEWS,
+    example: InfoCategory.GENERAL,
   })
   @IsEnum(InfoCategory)
   @IsOptional()
@@ -61,7 +61,7 @@ export class UpdateInformationDto {
   @ApiPropertyOptional({
     description: 'Updated category of the information',
     enum: InfoCategory,
-    example: InfoCategory.ALERT,
+    example: InfoCategory.SAFETY,
   })
   @IsEnum(InfoCategory)
   @IsOptional()

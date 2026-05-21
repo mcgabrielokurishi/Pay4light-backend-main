@@ -13,10 +13,9 @@ export class NotificationService {
     return this.prisma.notification.create({
       data: {
         userId:   dto.userId,
-        title:    dto.title,
-        message:  dto.message,
         type:     dto.type ?? NotificationType.INFO,
-        metadata: dto.metadata ?? {},
+        message:  dto.message,
+        metadata: dto.metadata ? JSON.stringify(dto.metadata) : null,
       },
     });
   }

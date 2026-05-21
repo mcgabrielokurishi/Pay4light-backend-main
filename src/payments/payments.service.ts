@@ -10,7 +10,7 @@ import { WalletService } from 'src/wallet/wallet.service';
 import { NotificationService } from 'src/notification/notification.service';
 import { InitializePaymentDto } from './dto/initialize-payment.dto';
 import { randomUUID } from 'crypto';
-import axios from 'axios';
+import axios, { type AxiosResponse } from 'axios';
 
 @Injectable()
 export class PaymentService {
@@ -67,7 +67,7 @@ export class PaymentService {
     });
 
     // Call Paystack initialize
-    const response = await axios.post(
+    const response: AxiosResponse<any> = await axios.post(
       `${this.paystackBase}/transaction/initialize`,
       {
         email:        user.email,
@@ -110,7 +110,7 @@ export class PaymentService {
   // ─── STEP 2: VERIFY PAYMENT ──────────────────────────────────────
   // Called after user returns from Paystack page
   async verifyPayment(reference: string, userId: string) {
-    const response = await axios.get(
+    const response: AxiosResponse<any> = await axios.get(
       `${this.paystackBase}/transaction/verify/${reference}`,
       { headers: this.headers },
     );
@@ -250,7 +250,7 @@ export class PaymentService {
     });
 
     // Charge the saved card
-    const response = await axios.post(
+    const response: AxiosResponse<any> = await axios.post(
       `${this.paystackBase}/transaction/charge_authorization`,
       {
         email:              user.email,

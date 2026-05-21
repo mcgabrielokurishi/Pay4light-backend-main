@@ -4,12 +4,10 @@ import {
   IsNotEmpty,
   IsEnum,
   IsOptional,
-  ValidateNested,
+  IsObject,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { NotificationType } from '@prisma/client';
-import { Type } from 'class-transformer';
-import { NotificationMetadataDto } from './notification-metadata.dto';
 
 export class CreateNotificationDto {
   @ApiProperty({
@@ -45,13 +43,12 @@ export class CreateNotificationDto {
   @IsOptional()
   type?: NotificationType;
 
-  // ✅ NEW FIELD
   @ApiPropertyOptional({
     description: 'Additional metadata for the notification',
-    type: NotificationMetadataDto,
+    type: 'object',
+    example: { reference: 'tx_ref_123', amount: 500 },
   })
-  @ValidateNested()
-  @Type(() => NotificationMetadataDto)
+  @IsObject()
   @IsOptional()
-  metadata?: NotificationMetadataDto;
+  metadata?: Record<string, any>;
 }
