@@ -18,6 +18,7 @@ import { VendElectricityDto } from './dto/vend-electricity.dto';
 import { VendTvDto } from './dto/vend-tv.dto';
 import { VendDataDto } from './dto/vend-data.dto';
 import { PushNotificationService } from 'src/push-notification/push-notification.service';
+import { NotificationManagerService } from 'src/notification-settings/notification-manager.service';
 
 @Injectable()
 export class VendingService {
@@ -32,6 +33,7 @@ export class VendingService {
     private readonly walletService:        WalletService,
     private readonly notificationService:  NotificationService,
     private readonly push:                 PushNotificationService,
+    private readonly notifManager: NotificationManagerService
   ) {
     this.baseUrl = this.configService.get<string>('BUYPOWER_BASE_URL_FOR_METER_VEND') || 'https://api.buypower.ng';
     this.apiKey  = this.configService.get<string>('BUYPOWER_API_KEY_FOR_METER_VEND')  || '';
@@ -250,6 +252,13 @@ export class VendingService {
             dto.amount,
           ),
         ]);
+        await this.notifManager.notifyElectricityPurchased(
+          userId,
+          vendData?.token,
+          vendData?.units,
+          dto.amount,
+          dto.meter,
+        );
 
         return {
           success: true,
@@ -268,6 +277,7 @@ export class VendingService {
             debtRemaining:   vendData?.debtRemaining,
           },
         };
+        
       }
 
       throw new Error(data?.message || 'Vending failed');

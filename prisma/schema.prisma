@@ -67,6 +67,40 @@ model Notification {
   user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model NotificationSettings {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  
+  // Push notification toggles
+  pushEnabled           Boolean  @default(true)
+  pushTransactions      Boolean  @default(true)
+  pushElectricity       Boolean  @default(true)
+  pushSecurity          Boolean  @default(true)
+  pushPromotions        Boolean  @default(true)
+  pushLowBalance        Boolean  @default(true)
+  
+  // Email notification toggles
+  emailEnabled          Boolean  @default(true)
+  emailTransactions     Boolean  @default(true)
+  emailElectricity      Boolean  @default(true)
+  emailSecurity         Boolean  @default(true)
+  emailPromotions       Boolean  @default(false)
+  emailLowBalance       Boolean  @default(true)
+  
+  // In-app notification toggles
+  inAppEnabled          Boolean  @default(true)
+  inAppTransactions     Boolean  @default(true)
+  inAppElectricity      Boolean  @default(true)
+  inAppSecurity         Boolean  @default(true)
+  inAppPromotions       Boolean  @default(true)
+  inAppLowBalance       Boolean  @default(true)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 
 
 model Information {
@@ -180,6 +214,7 @@ model User {
   devices              Device[]
   meters               Meter[]
   notifications Notification[]
+  notificationSettings NotificationSettings?
   bankAccounts         BankAccount[]       
   cards                Card[]              
   savedCards SavedCard[] 

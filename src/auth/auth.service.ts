@@ -22,6 +22,7 @@ import { VerifyForgotPasswordDto } from "./dto/verify-forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { randomUUID } from "crypto";
 import { WalletService } from "src/wallet/wallet.service";
+import { NotificationManagerService } from "src/notification-settings/notification-manager.service";
 
 @Injectable()
 export class AuthService {
@@ -52,6 +53,7 @@ export class AuthService {
     private otpService: OtpService,
      private walletService: WalletService,
      private push : PushNotificationService,
+     private notifManager:  NotificationManagerService
   ) {}
 
   // ─── REGISTER ───────────────────────────────────────────────────
@@ -311,15 +313,15 @@ export class AuthService {
 
   // ─── RESET PASSWORD — 
 
-  async changePassword(userId: string, dto: ChangePasswordDto) {
+
+
+async changePassword(userId: string, dto: ChangePasswordDto) {
   const user = await this.prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new BadRequestException('User not found');
 
-  // Verify current password
   const isValid = await bcrypt.compare(dto.currentPassword, user.password);
   if (!isValid) throw new UnauthorizedException('Current password is incorrect');
 
-  // Prevent same password
   const isSame = await bcrypt.compare(dto.newPassword, user.password);
   if (isSame) {
     throw new BadRequestException(
@@ -334,11 +336,14 @@ export class AuthService {
     data:  { password: hashedPassword },
   });
 
-  // Revoke all other sessions — force re-login on other devices
+  // Revoke all sessions
   await this.prisma.refreshToken.updateMany({
     where: { userId, revoked: false },
     data:  { revoked: true },
   });
+
+  // ✅ Send in-app + push + email notification (respects user settings)
+  await this.notifManager.notifyPasswordChanged(userId);
 
   return {
     success: true,

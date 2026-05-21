@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { PushNotificationService } from "src/push-notification/push-notification.service";
 import { BuypowerService } from "../buypower/buypower.service";
+import { NotificationManagerService } from "src/notification-settings/notification-manager.service";
 
 @Injectable()
 export class WalletService {
@@ -19,6 +20,7 @@ export class WalletService {
     private readonly prisma:          PrismaService,
     private readonly buypowerService: BuypowerService,
     private readonly push:            PushNotificationService,
+    private readonly notifManager:    NotificationManagerService
   ) {}
 
   // CREATE WALLET
@@ -179,6 +181,7 @@ export class WalletService {
 
       // ✅ Push notification after credit
       await this.push.notifyWalletCredited(userId, decimalAmount.toNumber());
+      await this.notifManager.notifyWalletCredited(userId, amount, externalRef);
 
       this.logger.log(
         `Wallet credited — userId: ${userId}, amount: NGN${amount}, ref: ${externalRef}`,
@@ -221,8 +224,9 @@ export class WalletService {
 
       // ✅ Push notification
       await this.push.notifyWalletCredited(userId, amount.toNumber());
-
+      await this.notifManager.notifyWalletCredited(userId, amount.toNumber());
       return { wallet: updatedWallet, transaction };
+
     });
   }
 
