@@ -6,10 +6,11 @@ import { AuthModule } from "../auth/auth.module";
 import { NotificationModule } from "src/notification/notification.module";
 import { BuypowerModule } from "../buypower/buypower.module";
 import { forwardRef } from "@nestjs/common";
+import { NotificationSettingsModule } from "src/notification-settings/notification-settings.module";
 import { PushNotificationModule } from "src/push-notification/push-notification.module";
 
 @Module({
-  imports: [PrismaModule,NotificationModule, AuthModule,PushNotificationModule, BuypowerModule,forwardRef(() => AuthModule)],
+  imports: [PrismaModule,NotificationModule,NotificationModule, AuthModule,PushNotificationModule, BuypowerModule,forwardRef(() => AuthModule)],
   controllers: [WalletController],
   providers: [WalletService],
   exports: [WalletService],

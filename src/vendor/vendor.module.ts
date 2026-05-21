@@ -4,6 +4,7 @@ import { VendingController } from './vendor.controller';
 import { ConfigModule } from '@nestjs/config';
 import { VendingService } from './vendor.service';
 import { NotificationModule } from 'src/notification/notification.module';
+import { NotificationSettingsModule } from 'src/notification-settings/notification-settings.module';
 import { WalletModule } from 'src/wallet/wallet.module';
 import { PushNotificationModule } from 'src/push-notification/push-notification.module';
 
@@ -14,7 +15,8 @@ import { PushNotificationModule } from 'src/push-notification/push-notification.
     WalletModule,
     PushNotificationModule,
     ConfigModule,
-    NotificationModule
+    NotificationModule,
+    NotificationSettingsModule
   ],
   controllers: [VendingController],
   providers: [VendingService],
