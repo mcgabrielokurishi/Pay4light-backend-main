@@ -149,7 +149,7 @@ export class NotificationManagerService {
   async notifyPasswordChanged(userId: string) {
     return this.send({
       userId,
-      title:    '🔐 Password Changed',
+      title:    ' Password Changed',
       message:  'Your Pay4Light password was changed successfully. If this was not you, contact support immediately.',
       category: 'security',
       metadata: { type: 'PASSWORD_CHANGE' },
@@ -164,7 +164,7 @@ export class NotificationManagerService {
   async notifyWalletCredited(userId: string, amount: number, reference?: string) {
     return this.send({
       userId,
-      title:    '💰 Wallet Credited',
+      title:    ' Wallet Credited',
       message:  `₦${amount.toLocaleString()} has been added to your Pay4Light wallet.`,
       category: 'transactions',
       metadata: { type: 'WALLET_CREDIT', amount: String(amount), reference },
@@ -260,11 +260,11 @@ export class NotificationManagerService {
     return `
       <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:24px;border:1px solid #eee;border-radius:8px;">
         <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:16px;margin-bottom:20px;">
-          <h2 style="color:#856404;margin:0;">🔐 ${title}</h2>
+          <h2 style="color:#856404;margin:0;"> ${title}</h2>
         </div>
         <p style="color:#333;">${main}</p>
         <div style="background:#f8d7da;border:1px solid #f5c6cb;border-radius:6px;padding:12px;margin:16px 0;">
-          <p style="color:#721c24;margin:0;font-size:14px;">⚠️ ${warning}</p>
+          <p style="color:#721c24;margin:0;font-size:14px;"> ${warning}</p>
         </div>
         <p style="color:#333;">Time: ${new Date().toLocaleString('en-NG', { timeZone: 'Africa/Lagos' })}</p>
         <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
@@ -305,7 +305,7 @@ export class NotificationManagerService {
   ): string {
     return `
       <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:24px;border:1px solid #eee;border-radius:8px;">
-        <h2 style="color:#1a1a1a;">⚡ Electricity Token Ready</h2>
+        <h2 style="color:#1a1a1a;"> Electricity Token Ready</h2>
         <div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:20px;text-align:center;margin:20px 0;">
           <p style="color:#666;font-size:13px;margin:0 0 8px;">Your Token</p>
           <p style="font-size:24px;font-weight:bold;color:#2e7d32;letter-spacing:4px;margin:0;">${token}</p>
