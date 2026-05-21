@@ -1,28 +1,28 @@
-import { PrismaClient, Role } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const email = process.env.ADMIN_EMAIL!;
+  // ✅ Hardcode your email directly
+  const email = 'mcgabrielokurishi@gmail.com'; // ← put your actual email here
 
-  await prisma.user.upsert({
+  const user = await prisma.user.findUnique({
     where: { email },
-    update: {
-      role: Role.ADMIN,
-    },
-    create: {
-      email,
-      password: 'temporary-password',
-      fullName: 'Super Admin',
-      role: Role.ADMIN,
-    },
   });
 
-  console.log('Admin setup complete');
+  if (!user) {
+    console.error(`❌ User with email ${email} not found. Register first then run this script.`);
+    return;
+  }
+
+  await prisma.user.update({
+    where: { email },
+    data:  { role: 'ADMIN' },
+  });
+
+  console.log(`✅ Admin role granted to ${email}`);
 }
 
 main()
   .catch(console.error)
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+  .finally(() => prisma.$disconnect());
