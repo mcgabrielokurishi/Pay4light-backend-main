@@ -355,6 +355,19 @@ export class PaymentService {
       reference,
       { description: `Wallet funded via Paystack — ₦${amount}` },
     );
+     console.log('=== PAYSTACK CHARGE SUCCESS ===');
+      console.log('Reference:', data.reference);
+      console.log('Authorization:', data.authorization);
+      console.log('==============================');
+      
+
+       if (data.authorization?.reusable) {
+          console.log('Saving card...');
+          await this.saveCard(tx.userId, data.authorization, data.customer);
+          console.log('Card saved!');
+        } else {
+          console.log('Card not reusable — not saving');
+        }
 
     // Save card if reusable
     if (data.authorization?.reusable) {

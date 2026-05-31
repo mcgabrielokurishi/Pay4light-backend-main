@@ -20,28 +20,21 @@ export class WebhookController {
 
   constructor(private readonly webhookService: WebhookService) {}
 
-  @Post('buypower')
-  @HttpCode(200)
-  async handleBuyPower(
-    @Headers('x-payable-signature') signature: string,
-    @Body() body: any,
-    @Req() req: RawBodyRequest<Request>,
-  ) {
-    this.logger.log('BuyPower webhook received');
-    this.logger.log('Webhook body:', JSON.stringify(body, null, 2));
+@Post('buypower')
+@HttpCode(200)
+async handleBuyPower(
+  @Headers('x-payable-signature') signature: string,
+  @Body() body: any,
+  @Req() req: any,
+) {
+ 
+  console.log('=== BUYPOWER WEBHOOK RECEIVED ===');
+  console.log('Headers:', req.headers);
+  console.log('Body:', JSON.stringify(body, null, 2));
+  console.log('Signature:', signature);
+  console.log('=================================');
 
-    // ✅ Verify signature
-    const rawBody = JSON.stringify(body);
-    const isValid = this.webhookService.verifyBuyPowerSignature(
-      signature,
-      rawBody,
-    );
 
-    if (!isValid) {
-      this.logger.error('Invalid BuyPower webhook signature');
-      throw new BadRequestException('Invalid signature');
-    }
-
-    return this.webhookService.handleBuyPowerEvent(body);
-  }
+  return this.webhookService.handleBuyPowerEvent(body);
+}
 }

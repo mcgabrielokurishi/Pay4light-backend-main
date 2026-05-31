@@ -6,6 +6,372 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model Device {
+  id          String   @id @default(uuid())
+  userId      String
+  deviceId    String
+  name        String?
+  ipAddress   String?
+  userAgent   String?
+  lastLoginAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, deviceId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  type      String
+  message   String
+  isRead    Boolean  @default(false)
+  metadata  String?
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model NotificationSettings {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  pushEnabled       Boolean  @default(true)
+  pushTransactions  Boolean  @default(true)
+  pushElectricity   Boolean  @default(true)
+  pushSecurity      Boolean  @default(true)
+  pushPromotions    Boolean  @default(true)
+  pushLowBalance    Boolean  @default(true)
+  emailEnabled      Boolean  @default(true)
+  emailTransactions Boolean  @default(true)
+  emailElectricity  Boolean  @default(true)
+  emailSecurity     Boolean  @default(true)
+  emailPromotions   Boolean  @default(false)
+  emailLowBalance   Boolean  @default(true)
+  inAppEnabled      Boolean  @default(true)
+  inAppTransactions Boolean  @default(true)
+  inAppElectricity  Boolean  @default(true)
+  inAppSecurity     Boolean  @default(true)
+  inAppPromotions   Boolean  @default(true)
+  inAppLowBalance   Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Information {
+  id          String       @id @default(cuid())
+  title       String
+  content     String
+  category    InfoCategory @default(GENERAL)
+  isPublished Boolean      @default(true)
+  createdBy   String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model MeterUsageStats {
+  id                 String    @id @default(cuid())
+  userId             String
+  meterId            String
+  avgDailyUsage      Float
+  avgDaysBetweenBuys Float
+  lastPurchaseDate   DateTime?
+  lastPurchaseUnits  Float?
+  forecastedRunOutAt DateTime?
+  daysRemaining      Int?
+  lastCalculatedAt   DateTime  @default(now())
+  meter              Meter     @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, meterId])
+}
+
+model VendorTransaction {
+  id              String   @id @default(uuid())
+  userId          String
+  reference       String   @unique
+  provider        String
+  serviceType     String
+  token           String?
+  meterID         String?
+  units           String?
+  amount          Float    @default(0)
+  status          String
+  externalRef     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  requestPayload  Json?
+  responsePayload Json?
+  user            User     @relation(fields: [userId], references: [id])
+}
+
+model SavedCard {
+  id                String   @id @default(cuid())
+  userId            String
+  authorizationCode String
+  cardType          String?
+  last4             String
+  expMonth          String?
+  expYear           String?
+  bank              String?
+  brand             String?
+  email             String
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model OTP {
+  id        String   @id @default(uuid())
+  userId    String?
+  phone     String?
+  email     String?
+  codeHash  String
+  purpose   String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id                   String                @id @default(uuid())
+  email                String?               @unique
+  phone                String?               @unique
+  password             String
+  firstName            String?
+  lastName             String?
+  fullName             String?
+  failedAttempts       Int                   @default(0)
+  lockedUntil          DateTime?
+  discoId              String?
+  isVerified           Boolean               @default(false)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  deletedAt            DateTime?
+  isActive             Boolean               @default(true)
+  bvn                  String?
+  nin                  String?
+  role                 Role                  @default(USER)
+  conversations        AIConversation[]
+  bankAccounts         BankAccount[]
+  cards                Card[]
+  devices              Device[]
+  deviceToken          DeviceToken[]
+  electricityPurchases ElectricityPurchase[]
+  meters               Meter[]
+  meterUsageStats      MeterUsageStats[]
+  notifications        Notification[]
+  notificationSettings NotificationSettings?
+  otps                 OTP[]
+  pushNotification     PushNotification[]
+  refreshTokens        RefreshToken[]
+  savedCards           SavedCard[]
+  transactions         Transaction[]
+  disco                Disco?                @relation(fields: [discoId], references: [id])
+  vendorTransactions   VendorTransaction[]
+  wallet               Wallet?
+}
+
+model BankAccount {
+  id            String   @id @default(uuid())
+  userId        String
+  bankName      String
+  bankCode      String
+  accountNumber String
+  accountName   String
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, accountNumber])
+}
+
+model Card {
+  id             String   @id @default(uuid())
+  userId         String
+  cardToken      String
+  last4          String
+  brand          String
+  expMonth       String
+  expYear        String
+  cardHolderName String?
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cardToken])
+}
+
+model LedgerEntry {
+  id            String            @id @default(uuid())
+  walletId      String
+  accountId     String
+  transactionId String
+  type          String
+  amount        Float             @default(0)
+  balanceBefore Float             @default(0)
+  balanceAfter  Float             @default(0)
+  description   String?
+  metadata      String?
+  createdAt     DateTime          @default(now())
+  account       LedgerAccount     @relation(fields: [accountId], references: [id])
+  transaction   LedgerTransaction @relation(fields: [transactionId], references: [id])
+  wallet        Wallet            @relation(fields: [walletId], references: [id])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String
+  revoked   Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model LedgerAccount {
+  id        String        @id @default(uuid())
+  name      String
+  accountId String
+  type      String
+  userId    String?
+  balance   Float         @default(0)
+  createdAt DateTime      @default(now())
+  entries   LedgerEntry[]
+}
+
+model LedgerTransaction {
+  id            String        @id @default(uuid())
+  reference     String        @unique
+  description   String?
+  walletId      String
+  transactionId String
+  status        String
+  createdAt     DateTime      @default(now())
+  entries       LedgerEntry[]
+}
+
+model Wallet {
+  id                   String        @id @default(uuid())
+  userId               String        @unique
+  amount               Float         @default(0)
+  balance              Float         @default(0)
+  currency             String        @default("NGN")
+  locked               Boolean       @default(false)
+  virtualAccountNuban  String?
+  virtual_account_bank String?
+  virtual_account_ref  String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  entries              LedgerEntry[]
+  transactions         Transaction[]
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Transaction {
+  id                  String               @id @default(uuid())
+  userId              String
+  walletId            String
+  meterId             String?
+  metadata            String
+  type                String
+  token               String?
+  amount              Float
+  kwh                 Float?
+  reference           String               @unique
+  status              String               @default("PENDING")
+  description         String?
+  createdAt           DateTime             @default(now())
+  electricityPurchase ElectricityPurchase?
+  meter               Meter?               @relation(fields: [meterId], references: [id])
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet              Wallet               @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+model ElectricityPurchase {
+  id            String      @id @default(uuid())
+  userId        String
+  transactionId String      @unique
+  disco         String
+  meterNumber   String
+  meterType     String
+  units         Float?
+  token         String?
+  status        String      @default("PENDING")
+  createdAt     DateTime    @default(now())
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AIConversation {
+  id        String   @id @default(uuid())
+  userId    String
+  role      String
+  message   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Meter {
+  id              String            @id @default(cuid())
+  userId          String
+  meterNumber     String            @unique
+  meterType       String
+  discoId         String
+  address         String?
+  meterName       String?
+  isDefault       Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  disco           Disco             @relation(fields: [discoId], references: [id])
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meterUsageStats MeterUsageStats[]
+  transactions    Transaction[]
+}
+
+model Disco {
+  id           String  @id @default(cuid())
+  name         String
+  code         String  @unique
+  tariffRate   Float
+  supportPhone String?
+  states       String
+  supportEmail String?
+  website      String?
+  isActive     Boolean @default(true)
+  meters       Meter[]
+  users        User[]
+}
+
+model DeviceToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  Platform @default(ANDROID)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PushNotification {
+  id        String           @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  data      Json?
+  type      NotificationType @default(INFO)
+  status    PushStatus       @default(PENDING)
+  sentAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 enum Role {
   USER
   ADMIN
@@ -19,6 +385,7 @@ enum NotificationType {
   ELECTRICITY
   SYSTEM
 }
+
 enum Platform {
   ANDROID
   IOS
@@ -39,421 +406,3 @@ enum InfoCategory {
   FAQ
   TIP
 }
-
-model Device {
-  id          String   @id @default(uuid())
-  userId      String
-  deviceId    String
-  name        String?
-  ipAddress   String?
-  userAgent   String?
-  lastLoginAt DateTime @default(now())
-  createdAt   DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id])
-
-  @@unique([userId, deviceId])
-}
-
-model Notification {
-  id        String   @id @default(uuid())
-  type      String
-  message   String
-  isRead    Boolean  @default(false)
-  metadata  String?  // changed from Json
-  createdAt DateTime @default(now())
-
-  userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model NotificationSettings {
-  id                    String   @id @default(cuid())
-  userId                String   @unique
-  
-  // Push notification toggles
-  pushEnabled           Boolean  @default(true)
-  pushTransactions      Boolean  @default(true)
-  pushElectricity       Boolean  @default(true)
-  pushSecurity          Boolean  @default(true)
-  pushPromotions        Boolean  @default(true)
-  pushLowBalance        Boolean  @default(true)
-  
-  // Email notification toggles
-  emailEnabled          Boolean  @default(true)
-  emailTransactions     Boolean  @default(true)
-  emailElectricity      Boolean  @default(true)
-  emailSecurity         Boolean  @default(true)
-  emailPromotions       Boolean  @default(false)
-  emailLowBalance       Boolean  @default(true)
-  
-  // In-app notification toggles
-  inAppEnabled          Boolean  @default(true)
-  inAppTransactions     Boolean  @default(true)
-  inAppElectricity      Boolean  @default(true)
-  inAppSecurity         Boolean  @default(true)
-  inAppPromotions       Boolean  @default(true)
-  inAppLowBalance       Boolean  @default(true)
-
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-
-
-model Information {
-  id          String          @id @default(cuid())
-  title       String
-  content     String
-  category    InfoCategory    @default(GENERAL)
-  isPublished Boolean         @default(true)
-  createdBy   String          // admin userId
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-}
-model MeterUsageStats {
-  id                  String   @id @default(cuid())
-  userId              String
-  meterId             String
-  avgDailyUsage       Float    // average kWh per day
-  avgDaysBetweenBuys  Float    // average days between purchases
-  lastPurchaseDate    DateTime?
-  lastPurchaseUnits   Float?   // units from last purchase
-  forecastedRunOutAt  DateTime? // predicted expiry
-  daysRemaining       Int?
-  lastCalculatedAt    DateTime @default(now())
-
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  meter Meter @relation(fields: [meterId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, meterId])
-}
-
-model VendorTransaction {
-  id              String   @id @default(uuid())
-  userId          String
-  reference       String   @unique
-  provider        String
-  serviceType     String
-  token           String?
-  meterID         String?
-  units           String?
-  amount          Float    @default(0)
-  status          String
-  requestPayload  Json?
-  responsePayload Json?
-  externalRef     String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id])
-}
-model SavedCard {
-  id                String   @id @default(cuid())
-  userId            String
-  authorizationCode String
-  cardType          String?
-  last4             String
-  expMonth          String?
-  expYear           String?
-  bank              String?
-  brand             String?
-  email             String
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-model OTP {
-  id        String   @id @default(uuid())
-  userId    String?
-  phone     String?
-  email     String?
-  codeHash  String
-  purpose   String
-  expiresAt DateTime
-  attempts  Int      @default(0)
-  verified  Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model User {
-  id       String  @id @default(uuid())
-  email    String? @unique
-  phone    String? @unique
-  password String
-
-  firstName      String?
-  lastName       String?
-  fullName       String?
-  failedAttempts Int       @default(0)
-  lockedUntil    DateTime?
-  bvn String? 
-  nin String? 
-  discoId        String?
-  isVerified     Boolean   @default(false)
-
-  // ── Account status (NEW) ──
-  isActive   Boolean   @default(true)   // false = deactivated
-  deletedAt  DateTime?                  // set = permanently deleted (soft)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  refreshTokens        RefreshToken[]
-  wallet               Wallet?
-  transactions         Transaction[]
-  electricityPurchases ElectricityPurchase[]
-  conversations        AIConversation[]
-  otps                 OTP[]
-  role Role @default(USER)
-  vendorTransactions VendorTransaction[]
-  devices              Device[]
-  meters               Meter[]
-  notifications Notification[]
-  notificationSettings NotificationSettings?
-  bankAccounts         BankAccount[]       
-  cards                Card[]              
-  savedCards SavedCard[] 
-  deviceToken DeviceToken[]
-  pushNotification PushNotification[]
-  meterUsageStats MeterUsageStats[]
- 
-  disco Disco? @relation(fields: [discoId], references: [id])
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// BANK ACCOUNT — stores user's saved bank accounts
-// Used for withdrawals / settlement to user's personal bank
-// ─────────────────────────────────────────────────────────────────────────────
-model BankAccount {
-  id            String   @id @default(uuid())
-  userId        String
-  bankName      String                      // e.g. "Access Bank"
-  bankCode      String                      // e.g. "044"
-  accountNumber String                      // 10-digit NUBAN
-  accountName   String                      // Verified account name
-  isDefault     Boolean  @default(false)    // only one default per user
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, accountNumber])          // no duplicate accounts per user
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CARD — stores user's saved debit/credit cards
-// NOTE: Never store raw CVV in production. In a real app, tokenise with
-// Paystack/Flutterwave and store only the token + masked pan.
-// This module stores the token + display info only.
-// ─────────────────────────────────────────────────────────────────────────────
-model Card {
-  id           String   @id @default(uuid())
-  userId       String
-  cardToken    String                        // token from payment provider
-  last4        String                        // last 4 digits e.g. "4242"
-  brand        String                        // "visa" | "mastercard" | "verve"
-  expMonth     String                        // "12"
-  expYear      String                        // "2027"
-  cardHolderName String?
-  isDefault    Boolean  @default(false)      // only one default per user
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, cardToken])
-}
-
-model LedgerEntry {
-  id            String   @id @default(uuid())
-  walletId      String
-  accountId     String
-  transactionId String
-  type          String
-  amount        Float    @default(0)
-  balanceBefore Float    @default(0)
-  balanceAfter  Float    @default(0)
-  description   String?
-  metadata      String?
-
-  transaction LedgerTransaction @relation(fields: [transactionId], references: [id])
-  account     LedgerAccount     @relation(fields: [accountId], references: [id])
-  wallet      Wallet            @relation(fields: [walletId], references: [id])
-
-  createdAt DateTime @default(now())
-}
-
-model RefreshToken {
-  id        String   @id @default(uuid())
-  userId    String
-  tokenHash String
-  revoked   Boolean  @default(false)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-model LedgerAccount {
-  id        String  @id @default(uuid())
-  name      String
-  accountId String
-  type      String
-  userId    String?
-  balance   Float   @default(0)
-
-  createdAt DateTime @default(now())
-  entries   LedgerEntry[]
-}
-
-model LedgerTransaction {
-  id            String  @id @default(uuid())
-  reference     String  @unique
-  description   String?
-  walletId      String
-  transactionId String
-  status        String
-
-  entries   LedgerEntry[]
-  createdAt DateTime @default(now())
-}
-
-model Wallet {
-  id       String  @id @default(uuid())
-  userId   String  @unique
-  amount   Float   @default(0)
-  balance  Float   @default(0)
-  currency String  @default("NGN")
-  locked   Boolean @default(false)
-
-  virtualAccountNuban  String?
-  virtual_account_bank String?
-  virtual_account_ref  String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  entries      LedgerEntry[]
-  transactions Transaction[]
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model Transaction {
-  id          String  @id @default(uuid())
-  userId      String
-  walletId    String
-  meterId     String?
-  metadata    String
-  type        String
-  token       String?
-  amount      Float
-  kwh         Float?
-  reference   String  @unique
-  status      String  @default("PENDING")
-  description String?
-
-  createdAt DateTime @default(now())
-
-  meter Meter? @relation(fields: [meterId], references: [id])
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
-
-  electricityPurchase ElectricityPurchase?
-}
-
-model ElectricityPurchase {
-  id            String @id @default(uuid())
-  userId        String
-  transactionId String @unique
-
-  disco       String
-  meterNumber String
-  meterType   String
-
-  units  Float?
-  token  String?
-  status String @default("PENDING")
-
-  createdAt DateTime @default(now())
-
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-}
-
-model AIConversation {
-  id        String   @id @default(uuid())
-  userId    String
-  role      String
-  message   String
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id])
-}
-
-model Meter {
-  id          String   @id @default(cuid())
-  userId      String
-  meterNumber String   @unique
-  meterType   String
-  discoId     String
-  address     String?
-  meterName   String?
-  isDefault   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-
-  
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  disco Disco @relation(fields: [discoId], references: [id])
-
-  meterUsageStats MeterUsageStats[]
-  transactions Transaction[]
-}
-
-model Disco {
-  id           String  @id @default(cuid())
-  name         String
-  code         String  @unique
-  tariffRate   Float
-  supportPhone String?
-  states       String
-  supportEmail String?
-  website      String?
-  isActive     Boolean @default(true)
-
-  meters Meter[]
-  users  User[]
-}
-model DeviceToken {
-  id        String   @id @default(cuid())
-  userId    String
-  token     String   @unique
-  platform  Platform @default(ANDROID)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model PushNotification {
-  id        String               @id @default(cuid())
-  userId    String
-  title     String
-  body      String
-  data      Json?
-  type      NotificationType     @default(INFO)
-  status    PushStatus           @default(PENDING)
-  sentAt    DateTime?
-  createdAt DateTime             @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-

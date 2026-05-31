@@ -79,6 +79,19 @@ async provisionVirtualAccount(@Req() req: any) {
     email:     user.email,
   });
 }
+@Post('sync')
+async syncWallet(@Req() req: any) {
+  const wallet = await this.walletService.getWallet(req.user.id);
+  return {
+    success: true,
+    message: 'Wallet synced',
+    data: {
+      balance:             wallet.balance,
+      virtualAccountNuban: wallet.virtualAccountNuban,
+      bankName:            wallet.virtual_account_bank,
+    },
+  };
+}
 
   // ─────────────────────────────────────────────────────────────────
   // POST /wallet/debit
