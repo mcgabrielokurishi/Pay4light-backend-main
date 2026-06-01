@@ -63,6 +63,7 @@ export class WalletService {
         bankName:       wallet.virtual_account_bank,
         accountName:    `${user.firstName} ${user.lastName}`,
         alreadyExisted: true,
+        currency:            'NGN'
       };
     }
 

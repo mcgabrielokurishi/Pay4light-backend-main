@@ -110,4 +110,31 @@ async syncWallet(@Req() req: any) {
       new Prisma.Decimal(amount.toString()),
     );
   }
+
+  // TEMPORARY DEBUG ENDPOINT — remove after fixing
+@Get('debug')
+async debugWallet(@Req() req: any) {
+  const wallet = await this.prisma.wallet.findUnique({
+    where: { userId: req.user.id },
+  });
+
+  // Also check all wallets with NUBANs
+  const allWithNuban = await this.prisma.wallet.findMany({
+    where: {
+      virtualAccountNuban: { not: null },
+    },
+    select: {
+      userId:              true,
+      balance:             true,
+      virtualAccountNuban: true,
+      virtual_account_ref: true,
+      virtual_account_bank: true,
+    },
+  });
+
+  return {
+    yourWallet:     wallet,
+    allNubans:      allWithNuban,
+  };
+}
 }
