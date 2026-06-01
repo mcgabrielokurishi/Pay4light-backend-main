@@ -34,6 +34,16 @@ async handleBuyPower(
   console.log('Signature:', signature);
   console.log('=================================');
 
+    if (process.env.NODE_ENV === 'production' && signature) {
+    const isValid = this.webhookService.verifyBuyPowerSignature(
+      signature,
+      JSON.stringify(body),
+    );
+    if (!isValid) throw new BadRequestException('Invalid signature');
+  }
+
+
+
 
   return this.webhookService.handleBuyPowerEvent(body);
 }
