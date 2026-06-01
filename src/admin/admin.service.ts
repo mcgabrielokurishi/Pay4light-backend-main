@@ -194,7 +194,7 @@ export class AdminService {
             transactions:      true,
             meters:             true,
             notifications:     true,
-            pushNotifications: true,
+            pushNotification: true,
           },
         },
       },
