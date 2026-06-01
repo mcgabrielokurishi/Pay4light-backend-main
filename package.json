@@ -8,7 +8,8 @@
   "scripts": {
     "build": "prisma db push && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "start": "node dist/src/main.js",
+    "start": "node dist/main.js",
+   
     "seed": "ts-node prisma/seed.ts",
     "start:dev": "nest start --watch",
     "dev": "node src/main.js",
