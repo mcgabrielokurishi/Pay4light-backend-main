@@ -141,7 +141,7 @@ export class AdminService {
           isActive:      true,
           isVerified:    true,
           failedAttempts: true,
-          lockedUntill:  true,
+          lockedUntil:  true,
           deletedAt:     true,
           createdAt:     true,
           discoId:       true,
@@ -192,7 +192,7 @@ export class AdminService {
         _count: {
           select: {
             transactions:      true,
-            Meter:             true,
+            meters:             true,
             notifications:     true,
             pushNotifications: true,
           },

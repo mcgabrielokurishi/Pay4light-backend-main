@@ -46,6 +46,7 @@ export class CreateNotificationDto {
   @ApiPropertyOptional({
     description: 'Additional metadata for the notification',
     type: 'object',
+    additionalProperties: true,
     example: { reference: 'tx_ref_123', amount: 500 },
   })
   @IsObject()

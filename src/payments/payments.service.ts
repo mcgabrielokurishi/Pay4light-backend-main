@@ -10,7 +10,8 @@ import { WalletService } from 'src/wallet/wallet.service';
 import { NotificationService } from 'src/notification/notification.service';
 import { InitializePaymentDto } from './dto/initialize-payment.dto';
 import { randomUUID } from 'crypto';
-import axios, { type AxiosResponse } from 'axios';
+import axios from 'axios';
+import type { AxiosResponse } from 'axios';
 
 @Injectable()
 export class PaymentService {
