@@ -20,27 +20,28 @@ export class WebhookService {
   ) {}
 
   // ✅ Verify BuyPower webhook signature
-  verifyBuyPowerSignature(signature: string, rawBody: string): boolean {
-    const secret = process.env.BUYPOWER_WEBHOOK_SECRET;
 
-    if (!secret) {
-      this.logger.error('BUYPOWER_WEBHOOK_SECRET not set');
-      return false;
-    }
+verifyBuyPowerSignature(signature: string, rawBody: string): boolean {
+  const secret = process.env.BUYPOWER_WEBHOOK_SECRET;
 
-    if (!signature) {
-      this.logger.warn('No signature provided — skipping in dev');
-      // ✅ In development, skip signature check
-      return process.env.NODE_ENV !== 'production';
-    }
-
-    const hash = crypto
-      .createHmac('sha256', secret)
-      .update(rawBody)
-      .digest('hex');
-
-    return hash === signature;
+  if (!secret) {
+    this.logger.error('BUYPOWER_WEBHOOK_SECRET not set');
+    return false;
   }
+
+  // ✅ Return false instead of throwing
+  if (!signature) {
+    this.logger.warn('No signature provided');
+    return false; // ← return false, don't throw
+  }
+
+  const hash = crypto
+    .createHmac('sha256', secret)
+    .update(rawBody)
+    .digest('hex');
+
+  return hash === signature;
+}
 
   // ✅ Route BuyPower events
   async handleBuyPowerEvent(event: any) {

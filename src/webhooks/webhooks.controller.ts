@@ -27,23 +27,26 @@ async handleBuyPower(
   @Body() body: any,
   @Req() req: any,
 ) {
- 
   console.log('=== BUYPOWER WEBHOOK RECEIVED ===');
-  console.log('Headers:', req.headers);
-  console.log('Body:', JSON.stringify(body, null, 2));
+  console.log('NODE_ENV:', process.env.NODE_ENV);
   console.log('Signature:', signature);
+  console.log('Body:', JSON.stringify(body, null, 2));
   console.log('=================================');
 
-    if (process.env.NODE_ENV === 'production' && signature) {
+  // ✅ Only check signature in production
+  if (process.env.NODE_ENV === 'production') {
     const isValid = this.webhookService.verifyBuyPowerSignature(
       signature,
       JSON.stringify(body),
     );
-    if (!isValid) throw new BadRequestException('Invalid signature');
+
+    if (!isValid) {
+      throw new BadRequestException('Invalid webhook signature');
+    }
+  } else {
+    // Development — skip signature check
+    console.log('DEV MODE — skipping signature verification');
   }
-
-
-
 
   return this.webhookService.handleBuyPowerEvent(body);
 }
