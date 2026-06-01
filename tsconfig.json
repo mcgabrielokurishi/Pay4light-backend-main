@@ -3,8 +3,11 @@
     "module": "commonjs",
     "target": "ES2021",
     "lib": ["ES2021"],
+
     "declaration": false,
     "sourceMap": true,
+
+    "rootDir": ".",
     "outDir": "./dist",
 
     "emitDecoratorMetadata": true,
@@ -12,11 +15,24 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
 
-    "baseUrl": "./",
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": true,
     "forceConsistentCasingInFileNames": true
   },
-  "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
+
+  "include": [
+    "src/**/*",
+    "prisma/**/*"
+  ],
+
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test",
+    "**/*spec.ts"
+  ]
 }
