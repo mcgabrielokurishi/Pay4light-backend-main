@@ -16,8 +16,8 @@ import * as crypto from "crypto";
 import { WalletService } from "../wallet/wallet.service";
 
 @Controller("webhooks")
-export class BuypowerController {
-  private readonly logger = new Logger(BuypowerController.name);
+export class WebhookController {
+  private readonly logger = new Logger(WebhookController.name);
 
   constructor(
     private readonly configService: ConfigService,
