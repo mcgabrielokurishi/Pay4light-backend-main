@@ -271,6 +271,17 @@ export class WalletService {
       return { wallet: updatedWallet, transaction };
     });
   }
+  // Add inside WalletService class
+async getAllWalletNubans() {
+  return this.prisma.wallet.findMany({
+    select: {
+      userId:               true,
+      virtualAccountNuban:  true,
+      virtual_account_ref:  true,
+      balance:              true,
+    },
+  });
+}
 
   // DEBIT WITH IDEMPOTENCY
   async debitWithIdempotency(
