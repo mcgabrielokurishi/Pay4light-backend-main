@@ -1,361 +1,214 @@
-import { Injectable, Logger } from '@nestjs/common';
-import OpenAI from 'openai';
-import { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
+// src/ai/ai.service.ts
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+} from '@nestjs/common';
+import {
+  GoogleGenerativeAI,
+  HarmCategory,
+  HarmBlockThreshold,
+  Content,
+} from '@google/generative-ai';
 import { PrismaService } from 'database/prisma.service';
-import { VendingService } from 'src/vendor/vendor.service';
-import { WalletService } from 'src/wallet/wallet.service';
-import { AI_TOOLS } from './ai.tools';
-import { ELECTRICAL_KNOWLEDGE } from './knowledge-base/Knowlege';
+import { SYSTEM_PROMPT } from './knowledge-base/Knowlege';
 import { ChatDto } from './dto/ai.dto';
 
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private readonly openai: OpenAI;
+  private readonly genAI:  GoogleGenerativeAI;
+  private readonly model:  any;
 
-  constructor(
-    private prisma: PrismaService,
-    private vendorService: VendingService,
-    private walletService: WalletService,
-  ) {
-    this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+  constructor(private readonly prisma: PrismaService) {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY is not set in environment variables');
+    }
+
+    this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+    // ✅ Use gemini-1.5-flash — free tier, fast, capable
+    this.model = this.genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      systemInstruction: SYSTEM_PROMPT,
+      generationConfig: {
+        maxOutputTokens: 1024,
+        temperature:     0.7,
+        topP:            0.9,
+      },
+      safetySettings: [
+        {
+          category:  HarmCategory.HARM_CATEGORY_HARASSMENT,
+          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        },
+        {
+          category:  HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+        },
+      ],
     });
   }
 
+  // ─── MAIN CHAT METHOD ─────────────────────────────────────────────
   async chat(userId: string, dto: ChatDto) {
     const { message, conversationId } = dto;
 
+    if (!message?.trim()) {
+      throw new BadRequestException('Message cannot be empty');
+    }
+
+    // Load or create conversation
     let conversation = conversationId
       ? await this.prisma.aIConversation.findFirst({
           where: { id: conversationId, userId },
         })
       : null;
 
-    const history: ChatCompletionMessageParam[] = conversation
-      ? (JSON.parse(conversation.message) as ChatCompletionMessageParam[])
+    // Build history for Gemini
+    const history: Content[] = conversation
+      ? (conversation.messages as unknown as Content[])
       : [];
 
-    // Add user message
-    history.push({ role: 'user', content: message });
-
-    // Call OpenAI
-    const response = await this.callOpenAI(userId, history);
-
-    // Save conversation
-    if (conversation) {
-      await this.prisma.aIConversation.update({
-        where: { id: conversation.id },
-        data: { message: JSON.stringify(history) },
-      });
-    } else {
-      conversation = await this.prisma.aIConversation.create({
-        data: { userId, message: JSON.stringify(history), role: 'user' },
-      });
-    }
-
-    return {
-      reply: response,
-      conversationId: conversation.id,
-    };
-  }
-
-  private async callOpenAI(
-    userId: string,
-    history: ChatCompletionMessageParam[],
-  ): Promise<string> {
-    let messages: any[] = [
-      {
-        role: 'system',
-        content: ELECTRICAL_KNOWLEDGE,
-      },
-      ...history,
-    ];
-
-    while (true) {
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages,
-        tools: AI_TOOLS as ChatCompletionTool[],
-        tool_choice: 'auto',
-      });
-
-      const choice = response.choices[0].message;
-
-      // ✅ Normal response
-      if (!choice.tool_calls) {
-        const text = choice.content || '';
-
-        history.push({
-          role: 'assistant',
-          content: text,
-        });
-
-        return text;
-      }
-
-      //  Tool calls
-      messages.push(choice);
-
-      for (const toolCall of choice.tool_calls) {
-        if (toolCall.type !== 'function') continue;
-
-        const toolName = toolCall.function.name || '';
-        const args = JSON.parse(toolCall.function.arguments || '{}');
-
-        this.logger.log(`AI calling tool: ${toolName}`);
-
-        const result = await this.executeTool(userId, toolName, args);
-
-        messages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          content: JSON.stringify(result),
-        });
-      }
-    }
-  }
-
-  private async executeTool(
-    userId: string,
-    toolName: string,
-    input: Record<string, any>,
-  ) {
     try {
-      switch (toolName) {
-        case 'get_wallet_balance':
-          return await this.getWalletBalance(userId);
+      // Start chat with history
+      const chat = this.model.startChat({ history });
 
-        case 'get_user_meters':
-          return await this.getUserMeters(userId);
+      // Send message
+      const result   = await chat.sendMessage(message);
+      const response = await result.response;
+      const reply    = response.text();
 
-        case 'buy_electricity':
-          return await this.buyElectricity(
+      // Update history
+      const updatedHistory: Content[] = [
+        ...history,
+        { role: 'user',  parts: [{ text: message }] },
+        { role: 'model', parts: [{ text: reply }] },
+      ];
+
+      // Save conversation
+      if (conversation) {
+        await this.prisma.aIConversation.update({
+          where: { id: conversation.id },
+          data:  { messages: updatedHistory as any },
+        });
+      } else {
+        conversation = await this.prisma.aIConversation.create({
+          data: {
             userId,
-            input.meterId,
-            input.amount,
-          );
-
-        case 'get_transaction_history':
-          return await this.getTransactionHistory(
-            userId,
-            input.meterId,
-            input.limit || 10,
-          );
-
-        case 'forecast_token_expiry':
-          return await this.forecastTokenExpiry(userId, input.meterId);
-
-        case 'get_disco_info':
-          return await this.getDiscoInfo(input.discoCode);
-
-        case 'add_meter':
-          return await this.addMeter(userId, input);
-
-        default:
-          return { error: `Unknown tool: ${toolName}` };
+            messages: updatedHistory as any,
+          },
+        });
       }
-    } catch (error) {
-      this.logger.error(`Tool ${toolName} failed:`, error);
-      return { error: error instanceof Error ? error.message : String(error) };
-    }
-  }
 
-  // ================= TOOLS =================
+      this.logger.log(`AI chat — userId: ${userId}, tokens used: ${response.usageMetadata?.totalTokenCount ?? 'unknown'}`);
 
-  private async getWalletBalance(userId: string) {
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { userId },
-    });
-
-    return {
-      balance: wallet?.balance ?? 0,
-      currency: 'NGN',
-    };
-  }
-
-  private async getUserMeters(userId: string) {
-    const meters = await this.prisma.meter.findMany({
-      where: { userId },
-      include: { disco: true },
-    });
-
-    return meters.map((m) => ({
-      id: m.id,
-      meterNumber: m.meterNumber,
-      meterType: m.meterType,
-      disco: m.disco.name,
-      discoCode: m.disco.code,
-      address: m.address,
-      isDefault: m.isDefault,
-    }));
-  }
-
-  private async buyElectricity(
-    userId: string,
-    meterId: string,
-    amount: number,
-  ) {
-    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
-
-    if (!wallet || wallet.balance < amount) {
-      return { success: false, error: 'Insufficient wallet balance' };
-    }
-
-    const meter = await this.prisma.meter.findFirst({
-      where: { id: meterId, userId },
-      include: { disco: true },
-    });
-
-    if (!meter) {
-      return { success: false, error: 'Meter not found' };
-    }
-
-    // TODO: integrate vendor service
-    return {
-      success: false,
-      message: 'Electricity purchase not implemented yet',
-    };
-  }
-
-  private async getTransactionHistory(
-    userId: string,
-    meterId?: string,
-    limit = 10,
-  ) {
-    const transactions = await this.prisma.transaction.findMany({
-      where: {
-        userId,
-        ...(meterId ? { meterId } : {}),
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      include: { meter: { include: { disco: true } } },
-    });
-
-    return transactions.map((t) => ({
-      id: t.id,
-      type: t.type,
-      amount: t.amount,
-      units: t.kwh,
-      token: t.token,
-      status: t.status,
-      meter: t.meter?.meterNumber,
-      disco: t.meter?.disco?.name,
-      date: t.createdAt,
-    }));
-  }
-
-  private async forecastTokenExpiry(userId: string, meterId: string) {
-    const transactions = await this.prisma.transaction.findMany({
-      where: {
-        userId,
-        meterId,
-        type: 'ELECTRICITY_PURCHASE',
-        status: 'SUCCESS',
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-    });
-
-    if (transactions.length < 2) {
       return {
-        forecast: null,
-        message: 'Not enough transaction history to forecast',
+        success:        true,
+        reply,
+        conversationId: conversation.id,
+        tokensUsed:     response.usageMetadata?.totalTokenCount,
       };
+
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Gemini AI error:', message);
+
+      // Handle rate limit
+      if (message.includes('429') || message.includes('quota')) {
+        throw new BadRequestException(
+          'AI assistant is temporarily busy. Please try again in a moment.',
+        );
+      }
+
+      throw new BadRequestException(
+        'AI assistant encountered an error. Please try again.',
+      );
+    }
+  }
+
+  // ─── GET CONVERSATION HISTORY ─────────────────────────────────────
+  async getConversation(userId: string, conversationId: string) {
+    const conversation = await this.prisma.aIConversation.findFirst({
+      where: { id: conversationId, userId },
+    });
+
+    if (!conversation) {
+      return { messages: [] };
     }
 
-    const intervals: number[] = [];
-
-    for (let i = 0; i < transactions.length - 1; i++) {
-      const diff =
-        transactions[i].createdAt.getTime() -
-        transactions[i + 1].createdAt.getTime();
-
-      intervals.push(diff / (1000 * 60 * 60 * 24));
-    }
-
-    const avgDays =
-      intervals.reduce((a, b) => a + b, 0) / intervals.length;
-
-    const lastPurchase = transactions[0].createdAt;
-
-    const forecastedExpiry = new Date(
-      lastPurchase.getTime() + avgDays * 24 * 60 * 60 * 1000,
-    );
-
-    const daysLeft = Math.max(
-      0,
-      Math.ceil(
-        (forecastedExpiry.getTime() - Date.now()) /
-          (1000 * 60 * 60 * 24),
-      ),
-    );
+    const messages = (conversation.messages as unknown as Content[]).map((m) => ({
+      role:    m.role === 'model' ? 'assistant' : 'user',
+      message: m.parts?.[0]?.text ?? '',
+    }));
 
     return {
-      lastPurchase,
-      forecastedExpiry,
-      daysLeft,
-      avgDaysBetweenPurchases: Math.round(avgDays),
-      message:
-        daysLeft <= 3
-          ? `Your electricity may run out in ${daysLeft} day(s). Top up soon!`
-          : `You have approximately ${daysLeft} days of electricity left.`,
+      conversationId: conversation.id,
+      messages,
+      createdAt:      conversation.createdAt,
+      updatedAt:      conversation.updatedAt,
     };
   }
 
-  private async getDiscoInfo(discoCode: string) {
-    const disco = await this.prisma.disco.findUnique({
-      where: { code: discoCode.toUpperCase() },
-    });
-
-    if (!disco) {
-      return { error: `DISCO with code ${discoCode} not found` };
-    }
-
-    return {
-      name: disco.name,
-      code: disco.code,
-      statesCovered: disco.states,
-      tariffRate: `₦${disco.tariffRate} per kWh`,
-      supportPhone: disco.supportPhone,
-      supportEmail: disco.supportEmail,
-      website: disco.website,
-    };
-  }
-
-  private async addMeter(userId: string, input: any) {
-    const disco = await this.prisma.disco.findUnique({
-      where: { code: input.discoCode.toUpperCase() },
-    });
-
-    if (!disco) {
-      return { success: false, error: `DISCO ${input.discoCode} not found` };
-    }
-
-    const existing = await this.prisma.meter.findUnique({
-      where: { meterNumber: input.meterNumber },
-    });
-
-    if (existing) {
-      return { success: false, error: 'Meter already registered' };
-    }
-
-    const meter = await this.prisma.meter.create({
-      data: {
-        userId,
-        meterNumber: input.meterNumber,
-        meterType: input.meterType,
-        discoId: disco.id,
-        address: input.address,
+  // ─── GET ALL CONVERSATIONS ────────────────────────────────────────
+  async getAllConversations(userId: string) {
+    const conversations = await this.prisma.aIConversation.findMany({
+      where:   { userId },
+      orderBy: { updatedAt: 'desc' },
+      take:    20,
+      select: {
+        id:        true,
+        createdAt: true,
+        updatedAt: true,
+        message:  true,
       },
     });
 
-    return {
-      success: true,
-      message: 'Meter added successfully',
-      meterId: meter.id,
-      meterNumber: meter.meterNumber,
-    };
+    return conversations.map((c) => {
+      const msgs     = (c.message as unknown as Content[]) || [];
+      const firstMsg = msgs.find((m) => m.role === 'user');
+      const preview  = firstMsg?.parts?.[0]?.text?.slice(0, 60) ?? 'New conversation';
+
+      return {
+        id:        c.id,
+        preview:   preview + (preview.length >= 60 ? '...' : ''),
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        messageCount: msgs.length,
+      };
+    });
+  }
+
+  // ─── DELETE CONVERSATION ──────────────────────────────────────────
+  async deleteConversation(userId: string, conversationId: string) {
+    await this.prisma.aIConversation.deleteMany({
+      where: { id: conversationId, userId },
+    });
+    return { success: true, message: 'Conversation deleted' };
+  }
+
+  // ─── CLEAR ALL CONVERSATIONS ──────────────────────────────────────
+  async clearAllConversations(userId: string) {
+    await this.prisma.aIConversation.deleteMany({
+      where: { userId },
+    });
+    return { success: true, message: 'All conversations cleared' };
+  }
+
+  // ─── QUICK ANSWER (no history) ────────────────────────────────────
+  // For simple one-off questions — saves tokens
+  async quickAnswer(question: string) {
+    try {
+      const result   = await this.model.generateContent(question);
+      const response = await result.response;
+
+      return {
+        success: true,
+        answer:  response.text(),
+      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Quick answer error:', message);
+      throw new BadRequestException('Failed to get answer. Please try again.');
+    }
   }
 }

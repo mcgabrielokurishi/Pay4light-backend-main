@@ -172,6 +172,8 @@ model User {
   disco                Disco?                @relation(fields: [discoId], references: [id])
   vendorTransactions   VendorTransaction[]
   wallet               Wallet?
+  meterApplications    MeterApplication[]
+  documents            Document[]
 }
 
 model BankAccount {
@@ -309,15 +311,6 @@ model ElectricityPurchase {
   user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model AIConversation {
-  id        String   @id @default(uuid())
-  userId    String
-  role      String
-  message   String
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id])
-}
-
 model Meter {
   id              String            @id @default(cuid())
   userId          String
@@ -333,6 +326,15 @@ model Meter {
   meterUsageStats MeterUsageStats[]
   transactions    Transaction[]
 }
+model AIConversation {
+  id        String   @id @default(cuid())
+  userId    String
+  messages  Json     // stores full conversation history
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
 
 model Disco {
   id           String  @id @default(cuid())
@@ -344,8 +346,9 @@ model Disco {
   supportEmail String?
   website      String?
   isActive     Boolean @default(true)
-  meters       Meter[]
-  users        User[]
+  meters          Meter[]
+  users           User[]
+  meterApplications MeterApplication[]
 }
 
 model DeviceToken {
@@ -372,6 +375,107 @@ model PushNotification {
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model MeterApplication {
+  id              String          @id @default(uuid())
+  reference       String          @unique @db.VarChar(20)
+
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  discoId         String
+  disco           Disco           @relation(fields: [discoId], references: [id])
+
+  address         String
+  state           String          @db.VarChar(60)
+  lga             String          @db.VarChar(80)
+
+  propertyType    PropertyType
+  occupancy       Occupancy
+  supplyPhase     SupplyPhase
+
+  loadEstimateKva Decimal         @db.Decimal(6, 2)
+
+  intendedUse     IntendedUse
+  appliancesNotes String?
+
+  status          ApplicationStatus @default(DRAFT)
+
+  feePaid         Boolean         @default(false)
+  feeAmount       Decimal         @db.Decimal(10, 2)
+
+  submittedAt     DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  documents       Document[]
+
+  @@index([status])
+}
+
+model Document {
+  id             String            @id @default(uuid())
+
+  applicationId  String
+  application    MeterApplication  @relation(fields: [applicationId], references: [id])
+
+  userId         String
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  docType        DocumentType
+
+  fileUrl        String
+  fileSizeKb     Int
+  mimeType       String            @db.VarChar(60)
+
+  verified       Boolean           @default(false)
+
+  uploadedAt     DateTime          @default(now())
+
+  @@index([applicationId])
+}
+
+enum DocumentType {
+  NATIONAL_ID
+  PASSPORT
+  DRIVERS_LICENSE
+  UTILITY_BILL
+  TENANCY_AGREEMENT
+  CAC_CERTIFICATE
+  PROPERTY_DOCUMENT
+  PASSPORT_PHOTOGRAPH
+  OTHER
+}
+
+enum PropertyType {
+  RESIDENTIAL
+  COMMERCIAL
+  INDUSTRIAL
+  MIXED_USE
+}
+
+enum Occupancy {
+  OWNER_OCCUPIED
+  TENANT
+}
+
+enum SupplyPhase {
+  SINGLE_PHASE
+  THREE_PHASE
+}
+
+enum IntendedUse {
+  HOME
+  BUSINESS
+  INDUSTRIAL
+}
+
+enum ApplicationStatus {
+  DRAFT
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  COMPLETED
+}
 enum Role {
   USER
   ADMIN

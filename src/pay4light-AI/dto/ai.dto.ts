@@ -1,28 +1,41 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional } from 'class-validator';
+// src/ai/dto/chat.dto.ts
+import { IsString, IsNotEmpty, IsOptional, MaxLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ChatDto {
   @ApiProperty({
-    description: 'The message content of the chat',
+    description: 'The message content sent by the user',
+    maxLength: 2000,
     example: 'Hello, how are you?',
   })
   @IsString()
-  message!: string;
+  @IsNotEmpty()
+  @MaxLength(2000, { message: 'Message too long — max 2000 characters' })
+  message: string;
 
-  @ApiProperty({
-    description: 'The ID of the conversation',
-    example: 'conv_123',
+  @ApiPropertyOptional({
+    description: 'Unique identifier for the conversation',
+    example: 'abc123',
   })
-  @IsOptional()
   @IsString()
+  @IsOptional()
   conversationId?: string;
+}
 
-  // Only for testing without auth
+export class QuickAnswerDto {
   @ApiProperty({
-    description: 'The ID of the user',
-    example: 'user_123',
+    description: 'question',
+    example: 'Hello',
   })
-  @IsOptional()
   @IsString()
-  userId?: string;
+  @IsNotEmpty()
+  question: string;
+
+  @ApiProperty({
+    description: 'The quick answer text',
+    example: 'Yes',
+  })
+  @IsString()
+  @IsNotEmpty()
+  answer: string;
 }

@@ -1,48 +1,74 @@
+// src/ai/ai.controller.ts
 import {
-  Body,
   Controller,
   Post,
-  Req,
-  UseGuards,
   Get,
+  Delete,
+  Body,
   Param,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
-import { AiService } from 'src/pay4light-AI/electricity-ai.service';
-import { ChatDto } from 'src/pay4light-AI/dto/ai.dto';
-// import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { AuthGuard } from '@nestjs/passport';
+import { AiService } from './electricity-ai.service';
+import { ChatDto,QuickAnswerDto } from './dto/ai.dto';
+
 
 @Controller('ai')
 export class AiController {
   constructor(private readonly aiService: AiService) {}
 
-
+  // ─── CHAT (with history) — protected ─────────────────────────────
   @Post('chat')
+  @UseGuards(AuthGuard('jwt'))
   async chat(@Req() req: any, @Body() dto: ChatDto) {
-    const userId = req.user?.id || dto.userId;
-
-    return this.aiService.chat(userId, dto);
+    return this.aiService.chat(req.user.id, dto);
   }
 
-
-  @Get('conversation/:id')
-  async getConversation(@Req() req: any, @Param('id') id: string) {
-    const userId = req.user?.id;
-
-    return this.aiService['prisma'].aIConversation.findFirst({
-      where: { id, userId },
-    });
+  // ─── QUICK ANSWER — public (no auth, no history) ─────────────────
+  // Good for FAQ page, landing page chatbot
+  @Post('ask')
+  async quickAnswer(@Body() dto: QuickAnswerDto) {
+    return this.aiService.quickAnswer(dto.question);
   }
 
+  // ─── GET ALL CONVERSATIONS ────────────────────────────────────────
+  @Get('conversations')
+  @UseGuards(AuthGuard('jwt'))
+  async getAllConversations(@Req() req: any) {
+    const data = await this.aiService.getAllConversations(req.user.id);
+    return {
+      success: true,
+      total:   data.length,
+      data,
+    };
+  }
 
+  // ─── GET ONE CONVERSATION ─────────────────────────────────────────
+  @Get('conversations/:id')
+  @UseGuards(AuthGuard('jwt'))
+  async getConversation(
+    @Req() req: any,
+    @Param('id') id: string,
+  ) {
+    const data = await this.aiService.getConversation(req.user.id, id);
+    return { success: true, data };
+  }
 
-  @Post('conversation/delete/:id')
-  async deleteConversation(@Req() req: any, @Param('id') id: string) {
-    const userId = req.user?.id;
+  // ─── DELETE ONE CONVERSATION ──────────────────────────────────────
+  @Delete('conversations/:id')
+  @UseGuards(AuthGuard('jwt'))
+  async deleteConversation(
+    @Req() req: any,
+    @Param('id') id: string,
+  ) {
+    return this.aiService.deleteConversation(req.user.id, id);
+  }
 
-    await this.aiService['prisma'].aIConversation.deleteMany({
-      where: { id, userId },
-    });
-
-    return { success: true, message: 'Conversation deleted' };
+  // ─── CLEAR ALL CONVERSATIONS ──────────────────────────────────────
+  @Delete('conversations')
+  @UseGuards(AuthGuard('jwt'))
+  async clearAll(@Req() req: any) {
+    return this.aiService.clearAllConversations(req.user.id);
   }
 }

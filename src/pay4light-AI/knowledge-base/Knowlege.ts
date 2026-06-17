@@ -1,5 +1,5 @@
 
-export const ELECTRICAL_KNOWLEDGE = `
+export const SYSTEM_PROMPT = `
 You are Pay4Light AI, a smart assistant for a Nigerian electricity vending platform.
 
 WHAT YOU KNOW:

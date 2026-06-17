@@ -33,7 +33,7 @@ export class NotificationManagerService {
     private readonly inApp:        NotificationService,
   ) {}
 
-  // ─── GET OR CREATE SETTINGS ──────────────────────────────────────
+  // ─── GET OR CREATE SETTINGS 
   async getSettings(userId: string) {
     let settings = await this.prisma.notificationSettings.findUnique({
       where: { userId },
@@ -49,7 +49,7 @@ export class NotificationManagerService {
     return settings;
   }
 
-  // ─── UPDATE SETTINGS ─────────────────────────────────────────────
+  //  UPDATE SETTINGS 
   async updateSettings(userId: string, dto: UpdateNotificationSettingsDto) {
     const settings = await this.prisma.notificationSettings.upsert({
       where:  { userId },
@@ -59,14 +59,14 @@ export class NotificationManagerService {
     return settings;
   }
 
-  // ─── SEND NOTIFICATION (respects settings) ───────────────────────
+  //  SEND NOTIFICATION (respects settings) 
   async send(payload: NotificationPayload) {
     const settings = await this.getSettings(payload.userId);
     const cat      = payload.category;
 
     const promises: Promise<any>[] = [];
 
-    // ─── IN-APP ──────────────────────────────────────────────────
+    //  IN-APP 
     const inAppCatKey = `inApp${this.capitalize(cat)}` as keyof typeof settings;
     const inAppOk     =
       settings.inAppEnabled &&
@@ -86,7 +86,7 @@ export class NotificationManagerService {
       );
     }
 
-    // ─── PUSH ────────────────────────────────────────────────────
+    //  PUSH 
     const pushCatKey = `push${this.capitalize(cat)}` as keyof typeof settings;
     const pushOk     =
       settings.pushEnabled &&
@@ -109,7 +109,7 @@ export class NotificationManagerService {
       );
     }
 
-    // ─── EMAIL ───────────────────────────────────────────────────
+    //  EMAIL 
     const emailCatKey = `email${this.capitalize(cat)}` as keyof typeof settings;
     const emailOk     =
       settings.emailEnabled &&
@@ -144,7 +144,7 @@ export class NotificationManagerService {
     await Promise.allSettled(promises);
   }
 
-  // ─── CONVENIENCE METHODS ─────────────────────────────────────────
+  // ─── CONVENIENCE METHODS 
 
   async notifyPasswordChanged(userId: string) {
     return this.send({
@@ -234,7 +234,7 @@ export class NotificationManagerService {
     });
   }
 
-  // ─── EMAIL HTML BUILDERS ─────────────────────────────────────────
+  // ─── EMAIL HTML BUILDERS 
 
   private buildDefaultEmailHtml(
     title:   string,

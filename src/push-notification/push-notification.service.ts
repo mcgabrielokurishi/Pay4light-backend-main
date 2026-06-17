@@ -13,7 +13,7 @@ export class PushNotificationService {
     private readonly firebase: FirebaseService,
   ) {}
 
-  // ─── REGISTER DEVICE TOKEN ──────────────────────────────────────
+  // ─── REGISTER DEVICE TOKEN 
   async registerDeviceToken(
     userId:   string,
     token:    string,
@@ -29,7 +29,7 @@ export class PushNotificationService {
     return { success: true, message: 'Device token registered' };
   }
 
-  // ─── REMOVE DEVICE TOKEN (logout) ───────────────────────────────
+  // ─── REMOVE DEVICE TOKEN (logout) 
   async removeDeviceToken(userId: string, token: string) {
     await this.prisma.deviceToken.updateMany({
       where: { userId, token },
@@ -38,7 +38,7 @@ export class PushNotificationService {
     return { success: true, message: 'Device token removed' };
   }
 
-  // ─── SEND TO ONE USER ────────────────────────────────────────────
+  // ─── SEND TO ONE USER 
   async sendToUser(
     userId:  string,
     title:   string,
@@ -113,7 +113,7 @@ export class PushNotificationService {
   async notifyWalletCredited(userId: string, amount: number) {
     return this.sendToUser(
       userId,
-      '💰 Wallet Credited',
+      ' Wallet Credited',
       `₦${amount.toLocaleString()} has been added to your Pay4Light wallet`,
       { type: 'WALLET_CREDIT', amount: amount.toString() },
       NotificationType.TRANSACTION,
@@ -123,7 +123,7 @@ export class PushNotificationService {
   async notifyWalletDebited(userId: string, amount: number) {
     return this.sendToUser(
       userId,
-      '💸 Wallet Debited',
+      ' Wallet Debited',
       `₦${amount.toLocaleString()} has been deducted from your wallet`,
       { type: 'WALLET_DEBIT', amount: amount.toString() },
       NotificationType.TRANSACTION,
@@ -138,7 +138,7 @@ export class PushNotificationService {
   ) {
     return this.sendToUser(
       userId,
-      '⚡ Electricity Token Ready',
+      ' Electricity Token Ready',
       `Your token: ${token} | ${units} kWh purchased`,
       { type: 'ELECTRICITY', token, units, amount: amount.toString() },
       NotificationType.ELECTRICITY,
@@ -148,7 +148,7 @@ export class PushNotificationService {
   async notifyLowBalance(userId: string, balance: number) {
     return this.sendToUser(
       userId,
-      '⚠️ Low Wallet Balance',
+      ' Low Wallet Balance',
       `Your balance is ₦${balance.toLocaleString()}. Top up to avoid service interruption.`,
       { type: 'LOW_BALANCE', balance: balance.toString() },
       NotificationType.WARNING,
@@ -158,7 +158,7 @@ export class PushNotificationService {
   async notifyTokenExpiringSoon(userId: string, daysLeft: number, meterId: string) {
     return this.sendToUser(
       userId,
-      '🔋 Electricity Running Low',
+      ' Electricity Running Low',
       `Your meter ${meterId} may run out in ${daysLeft} day(s). Buy units now.`,
       { type: 'TOKEN_EXPIRY', daysLeft: daysLeft.toString(), meterId },
       NotificationType.WARNING,
@@ -168,19 +168,19 @@ export class PushNotificationService {
   async notifyPasswordChanged(userId: string) {
     return this.sendToUser(
       userId,
-      '🔐 Password Changed',
+      ' Password Changed',
       'Your Pay4Light password was changed. If this was not you, contact support immediately.',
       { type: 'SECURITY' },
       NotificationType.WARNING,
     );
   }
 
-  // ─── BROADCAST TO ALL USERS (admin) ─────────────────────────────
+  // ─── BROADCAST TO ALL USERS (admin) 
   async broadcastToAll(title: string, body: string, data?: Record<string, string>) {
     return this.firebase.sendToTopic('all-users', title, body, data);
   }
 
-  // ─── GET PUSH HISTORY FOR USER ───────────────────────────────────
+  // ─── GET PUSH HISTORY FOR USER 
   async getPushHistory(userId: string, page = 1, limit = 20) {
     const [notifications, total] = await Promise.all([
       this.prisma.pushNotification.findMany({
