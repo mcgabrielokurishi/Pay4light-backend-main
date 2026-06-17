@@ -107,21 +107,18 @@ constructor(private readonly prisma: PrismaService) {
         tokensUsed:     response.usageMetadata?.totalTokenCount,
       };
 
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error('Gemini AI error:', message);
+} catch (error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  this.logger.error('Gemini AI error:', message);
 
-      // Handle rate limit
-      if (message.includes('429') || message.includes('quota')) {
-        throw new BadRequestException(
-          'AI assistant is temporarily busy. Please try again in a moment.',
-        );
-      }
+  console.error('FULL AI ERROR:', error);
 
-      throw new BadRequestException(
-        'AI assistant encountered an error. Please try again.',
-      );
-    }
+  throw new BadRequestException({
+    message,
+    response: (error as any)?.response?.data,
+    stack: error instanceof Error ? error.stack : undefined,
+  });
+}
   }
 
   // ─── GET CONVERSATION HISTORY ─────────────────────────────────────
