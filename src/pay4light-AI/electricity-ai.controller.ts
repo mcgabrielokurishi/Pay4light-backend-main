@@ -32,6 +32,20 @@ export class AiController {
     return this.aiService.quickAnswer(dto.question);
   }
 
+  // Add to ai.controller.ts temporarily
+@Get('models')
+async listModels() {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`
+  );
+  const data: any = await response.json();
+  return data?.models?.map((m: any) => ({
+    name:               m.name,
+    displayName:        m.displayName,
+    supportedMethods:   m.supportedGenerationMethods,
+  }));
+}
+
   // ─── GET ALL CONVERSATIONS ────────────────────────────────────────
   @Get('conversations')
   @UseGuards(AuthGuard('jwt'))

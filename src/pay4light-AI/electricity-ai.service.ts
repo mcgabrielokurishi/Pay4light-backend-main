@@ -19,36 +19,34 @@ export class AiService {
   private readonly logger = new Logger(AiService.name);
   private readonly genAI:  GoogleGenerativeAI;
   private readonly model:  any;
-
-  constructor(private readonly prisma: PrismaService) {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY is not set in environment variables');
-    }
-
-    this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-    // ✅ Use gemini-1.5-flash — free tier, fast, capable
-    this.model = this.genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      systemInstruction: SYSTEM_PROMPT,
-      generationConfig: {
-        maxOutputTokens: 1024,
-        temperature:     0.7,
-        topP:            0.9,
-      },
-      safetySettings: [
-        {
-          category:  HarmCategory.HARM_CATEGORY_HARASSMENT,
-          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-        },
-        {
-          category:  HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-        },
-      ],
-    });
+constructor(private readonly prisma: PrismaService) {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY is not set in environment variables');
   }
 
+  this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+  // ✅ Use gemini-2.0-flash — free tier, latest, faster
+  this.model = this.genAI.getGenerativeModel({
+    model: 'gemini-2.0-flash',
+    systemInstruction: SYSTEM_PROMPT,
+    generationConfig: {
+      maxOutputTokens: 1024,
+      temperature:     0.7,
+      topP:            0.9,
+    },
+    safetySettings: [
+      {
+        category:  HarmCategory.HARM_CATEGORY_HARASSMENT,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+      },
+      {
+        category:  HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+      },
+    ],
+  });
+}
   // ─── MAIN CHAT METHOD ─────────────────────────────────────────────
   async chat(userId: string, dto: ChatDto) {
     const { message, conversationId } = dto;
