@@ -159,12 +159,12 @@ export class AiService {
         id:        true,
         createdAt: true,
         updatedAt: true,
-        message:  true,
+        messages: true,
       },
     });
 
     return conversations.map((c) => {
-      const msgs     = (c.message as unknown as Content[]) || [];
+      const msgs     = (c.messages as unknown as Content[]) || [];
       const firstMsg = msgs.find((m) => m.role === 'user');
       const preview  = firstMsg?.parts?.[0]?.text?.slice(0, 60) ?? 'New conversation';
 

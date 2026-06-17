@@ -1,4 +1,4 @@
-import { ELECTRICAL_KNOWLEDGE } from "./knowledge-base/Knowlege";
+import { SYSTEM_PROMPT } from "./knowledge-base/Knowlege";
 
 export function buildElectricityPrompt(question: string,context: any) {
   return `
@@ -20,7 +20,7 @@ User Question:
 
 
 FAQs:
-${JSON.stringify(ELECTRICAL_KNOWLEDGE)}
+${SYSTEM_PROMPT}
 
 
 

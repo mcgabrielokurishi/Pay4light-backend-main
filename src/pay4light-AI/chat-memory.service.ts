@@ -9,8 +9,12 @@ export class ChatMemoryService {
     await this.prisma.aIConversation.create({
       data: {
         userId,
-        role,
-        message,
+        messages: [
+          {
+            role: role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: message }],
+          },
+        ],
       },
     });
   }
