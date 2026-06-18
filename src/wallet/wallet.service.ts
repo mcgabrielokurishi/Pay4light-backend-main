@@ -11,6 +11,8 @@ import { randomUUID } from "crypto";
 import { PushNotificationService } from "src/push-notification/push-notification.service";
 import { BuypowerService } from "../buypower/buypower.service";
 import { NotificationManagerService } from "src/notification-settings/notification-manager.service";
+import { MailService } from 'src/common/services/mail.service';
+import { getWalletFundedEmail } from 'src/common/template/email.template';
 
 @Injectable()
 export class WalletService {
@@ -20,7 +22,8 @@ export class WalletService {
     private readonly prisma:          PrismaService,
     private readonly buypowerService: BuypowerService,
     private readonly push:            PushNotificationService,
-    private readonly notifManager:    NotificationManagerService
+    private readonly notifManager:    NotificationManagerService,
+    private readonly mailService:     MailService,
   ) {}
 
   // CREATE WALLET
@@ -188,6 +191,45 @@ export class WalletService {
         `Wallet credited — userId: ${userId}, amount: NGN${amount}, ref: ${externalRef}`,
       );
 
+      // ✅ Send wallet funded email
+      const userDetails = await tx.user.findUnique({
+        where: { id: userId },
+        select: { email: true, firstName: true, fullName: true },
+      });
+
+      const firstName =
+        userDetails?.firstName || userDetails?.fullName?.split(' ')[0] || 'Customer';
+
+      const now = new Date().toLocaleString('en-NG', {
+        timeZone: 'Africa/Lagos',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      if (userDetails?.email) {
+        this.mailService
+          .sendEmail(
+            userDetails.email,
+            '✅ Wallet Funded — Pay4light.ng',
+            getWalletFundedEmail({
+              firstName,
+              amount: decimalAmount.toNumber(),
+              newBalance: Number(updatedWallet.balance),
+              paymentMethod: meta.description?.includes('card')
+                ? 'Card Payment'
+                : 'Bank Transfer',
+              reference: externalRef,
+              date: now,
+            }),
+          )
+          .catch((err) =>
+            this.logger.error(`Failed to send wallet funded email: ${err?.message || err}`),
+          );
+      }
+
       return { wallet: updatedWallet, transaction, duplicated: false };
     });
   }
@@ -223,10 +265,12 @@ export class WalletService {
         },
       });
 
-      // ✅ Push notification
+      //  Push notification
       await this.push.notifyWalletCredited(userId, amount.toNumber());
       await this.notifManager.notifyWalletCredited(userId, amount.toNumber());
       return { wallet: updatedWallet, transaction };
+
+      
 
     });
   }

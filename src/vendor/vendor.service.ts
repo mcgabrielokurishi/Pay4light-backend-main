@@ -13,7 +13,9 @@ import { WalletService } from 'src/wallet/wallet.service';
 import { firstValueFrom } from 'rxjs';
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
+import { MailService } from 'src/common/services/mail.service';
 import { NotificationService } from 'src/notification/notification.service';
+import { getMeterRechargeEmail } from 'src/common/template/email.template';
 import { VendElectricityDto } from './dto/vend-electricity.dto';
 import { VendTvDto } from './dto/vend-tv.dto';
 import { VendDataDto } from './dto/vend-data.dto';
@@ -32,6 +34,7 @@ export class VendingService {
     private readonly prisma:               PrismaService,
     private readonly walletService:        WalletService,
     private readonly notificationService:  NotificationService,
+    private readonly mailService:         MailService,
     private readonly push:                 PushNotificationService,
     private readonly notifManager: NotificationManagerService
   ) {
@@ -222,63 +225,104 @@ export class VendingService {
 
       // SUCCESS
       if (data?.status === true && responseCode === 200) {
-        const vendData = data.data;
+  const vendData = data.data;
 
-        await this.prisma.vendorTransaction.update({
-          where: { reference },
-          data: {
-            status:          'SUCCESS',
-            responsePayload: data,
-            token:           vendData?.token,
-            units:           vendData?.units?.toString(),
-          },
-        });
+  await this.prisma.vendorTransaction.update({
+    where: { reference },
+    data: {
+      status:          'SUCCESS',
+      responsePayload: data,
+      token:           vendData?.token,
+      units:           vendData?.units?.toString(),
+    },
+  });
 
-        this.logger.log(
-          `Electricity vended — orderId: ${orderId}, token: ${vendData?.token}`,
-        );
+  // ✅ Get user details for email
+  const userDetails = await this.prisma.user.findUnique({
+    where:  { id: userId },
+    select: {
+      email:     true,
+      fullName:  true,
+      firstName: true,
+      lastName:  true,
+    },
+  });
 
-        // ✅ Notifications — both in-app and push
-        await Promise.all([
-          this.notificationService.notifyElectricity(
-            userId,
-            `✅ Electricity purchased! Token: ${vendData?.token}. Units: ${vendData?.units} kWh`,
-            { token: vendData?.token, units: vendData?.units, orderId },
-          ),
-          this.push.notifyElectricityPurchased(
-            userId,
-            vendData?.token,
-            vendData?.units,
-            dto.amount,
-          ),
-        ]);
-        await this.notifManager.notifyElectricityPurchased(
-          userId,
-          vendData?.token,
-          vendData?.units,
-          dto.amount,
-          dto.meter,
-        );
+  // ✅ Get meter details
+  const meter = await this.prisma.meter.findFirst({
+    where:   { meterNumber: dto.meter },
+    include: { disco: true },
+  });
 
-        return {
-          success: true,
-          message: 'Electricity purchased successfully',
-          data: {
-            orderId,
-            reference,
-            token:           vendData?.token,
-            units:           vendData?.units,
-            amountPaid:      vendData?.totalAmountPaid,
-            amountGenerated: vendData?.amountGenerated,
-            tax:             vendData?.tax,
-            receiptNo:       vendData?.receiptNo,
-            disco:           vendData?.disco,
-            debtAmount:      vendData?.debtAmount,
-            debtRemaining:   vendData?.debtRemaining,
-          },
-        };
-        
-      }
+  const firstName =
+    userDetails?.firstName ||
+    userDetails?.fullName?.split(' ')[0] ||
+    'Customer';
+
+  const now = new Date().toLocaleString('en-NG', {
+    timeZone:    'Africa/Lagos',
+    day:         'numeric',
+    month:       'long',
+    year:        'numeric',
+    hour:        '2-digit',
+    minute:      '2-digit',
+  });
+
+  // ✅ Send email with token
+  if (userDetails?.email) {
+    this.mailService.sendEmail(
+      userDetails.email,
+      '⚡ Meter Recharged — Your Token is Ready',
+      getMeterRechargeEmail({
+        firstName,
+        amount:        dto.amount,
+        units:         vendData?.units?.toString() || '0',
+        meterNumber:   dto.meter,
+        token:         vendData?.token || '',
+        disco:         meter?.disco?.name || dto.disco,
+        reference,
+        date:          now,
+        paymentMethod: 'Wallet',
+        meterNickname: meter?.address || 'My Meter',
+      }),
+    ).catch((err) =>
+      this.logger.error(`Failed to send recharge email: ${err.message}`),
+    );
+  }
+
+  // In-app + push notifications
+  await Promise.all([
+    this.notificationService.notifyElectricity(
+      userId,
+      `⚡ Token ready: ${vendData?.token}. Units: ${vendData?.units} kWh`,
+      { token: vendData?.token, units: vendData?.units, orderId },
+    ),
+    this.push.notifyElectricityPurchased(
+      userId,
+      vendData?.token,
+      vendData?.units,
+      dto.amount,
+    ),
+  ]);
+
+  return {
+    success: true,
+    message: 'Electricity purchased successfully',
+    data: {
+      orderId,
+      reference,
+      token:           vendData?.token,
+      units:           vendData?.units,
+      amountPaid:      vendData?.totalAmountPaid,
+      amountGenerated: vendData?.amountGenerated,
+      tax:             vendData?.tax,
+      receiptNo:       vendData?.receiptNo,
+      disco:           vendData?.disco,
+      debtAmount:      vendData?.debtAmount,
+      debtRemaining:   vendData?.debtRemaining,
+    },
+  };
+}
 
       throw new Error(data?.message || 'Vending failed');
 
