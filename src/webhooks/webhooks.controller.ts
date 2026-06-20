@@ -24,6 +24,157 @@ export class WebhookController {
     private readonly notification:  NotificationService,
   ) {}
 
+  @Post('monnify')
+  @HttpCode(200)
+  async handleMonnify(
+    @Headers('monnify-signature') signature: string,
+    @Body() payload: any,
+    @Req() req: any,
+  ) {
+    this.logger.log('=== MONNIFY WEBHOOK RECEIVED ===');
+    this.logger.log(JSON.stringify(payload, null, 2));
+
+    // ✅ Verify Monnify signature
+    const webhookSecret = this.configService.get<string>('MONNIFY_WEBHOOK_SECRET');
+    const isProduction  = this.configService.get<string>('NODE_ENV') === 'production';
+
+    if (isProduction && webhookSecret) {
+      const isValid = this.verifyMonnifySignature(
+        JSON.stringify(payload),
+        signature,
+        webhookSecret,
+      );
+      if (!isValid) {
+        this.logger.error('Invalid Monnify webhook signature');
+        throw new BadRequestException('Invalid signature');
+      }
+    }
+
+    const eventType = payload?.eventType || '';
+    this.logger.log(`Monnify event: "${eventType}"`);
+
+    // ✅ Handle collection events
+    if (
+      eventType === 'SUCCESSFUL_TRANSACTION'          ||
+      eventType === 'REVERSED_TRANSACTION'            ||
+      eventType.includes('SUCCESSFUL')
+    ) {
+      return this.handleMonnifyCollection(payload);
+    }
+
+    this.logger.log(`Unhandled Monnify event: ${eventType}`);
+    return { received: true };
+  }
+
+  private async handleMonnifyCollection(payload: any) {
+    const data = payload?.eventData || payload;
+
+    const amount    = Number(data?.amountPaid || data?.amount || 0);
+    const reference = data?.transactionReference || data?.paymentReference;
+
+    // ✅ Monnify sends accountNumber for reserved account payments
+    const accountNumber =
+      data?.destinationAccountInformation?.accountNumber ||
+      data?.accountNumber ||
+      null;
+
+    const narration =
+      data?.narration ||
+      data?.paymentDescription ||
+      '';
+
+    this.logger.log(
+      `Collection — account: ${accountNumber}, amount: ₦${amount}, ref: ${reference}`,
+    );
+
+    if (!amount || amount <= 0) {
+      this.logger.error('Invalid amount in webhook');
+      return { received: true, error: 'Invalid amount' };
+    }
+
+    // ✅ Find user by account number
+    let wallet = null;
+
+    if (accountNumber) {
+      wallet = await this.walletService.findByAccountNumber(accountNumber);
+      this.logger.log(
+        `Account lookup "${accountNumber}": ${wallet ? 'FOUND' : 'NOT FOUND'}`,
+      );
+    }
+
+    // Fallback — find by reference (userId)
+    if (!wallet && reference) {
+      wallet = await this.walletService.findUserByNubanOrReference('', reference);
+      this.logger.log(
+        `Reference lookup "${reference}": ${wallet ? 'FOUND' : 'NOT FOUND'}`,
+      );
+    }
+
+    if (!wallet) {
+      const allWallets = await this.walletService.getAllWalletNubans();
+      this.logger.warn('All wallet accounts:', JSON.stringify(allWallets));
+      return { received: true, error: 'Wallet not found' };
+    }
+
+    const userId = wallet.id || (wallet as any).userId;
+
+    // ✅ Credit wallet
+    try {
+      const result = await this.walletService.creditFromWebhook(
+        userId,
+        amount,
+        reference,
+        {
+          description: `Wallet funded via Monnify — ₦${amount.toLocaleString()}`,
+          metadata: {
+            accountNumber,
+            narration,
+            reference,
+            eventType: payload?.eventType,
+          },
+        },
+      );
+
+      if (result.duplicated) {
+        this.logger.warn(`Duplicate webhook — ref: ${reference}`);
+        return { received: true, duplicate: true };
+      }
+
+      await this.notification.create({
+        userId,
+        title:   '💰 Wallet Funded',
+        message: `₦${amount.toLocaleString()} has been added to your wallet.`,
+        type:    'TRANSACTION',
+        metadata: { amount, reference },
+      });
+
+      this.logger.log(`✅ Wallet credited — userId: ${userId}, amount: ₦${amount}`);
+      return { received: true, success: true };
+
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error('Failed to credit wallet:', err.message);
+      return { received: true, error: err.message };
+    }
+  }
+
+  private verifyMonnifySignature(
+    body:      string,
+    signature: string,
+    secret:    string,
+  ): boolean {
+    try {
+      const hash = crypto
+        .createHmac('sha512', secret)
+        .update(body)
+        .digest('hex');
+      return hash === signature;
+    } catch {
+      return false;
+    }
+  }
+
+
   @Post("buypower")
   @HttpCode(200)
   async handleBuypowerWebhook(

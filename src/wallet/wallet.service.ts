@@ -6,6 +6,7 @@ import {
   InternalServerErrorException,
 } from "@nestjs/common";
 import { PrismaService } from "database/prisma.service";
+import { MonnifyService } from "src/monnify/monnify.service";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { PushNotificationService } from "src/push-notification/push-notification.service";
@@ -22,6 +23,7 @@ export class WalletService {
     private readonly prisma:          PrismaService,
     private readonly buypowerService: BuypowerService,
     private readonly push:            PushNotificationService,
+    private readonly monnifyService:  MonnifyService,
     private readonly notifManager:    NotificationManagerService,
     private readonly mailService:     MailService,
   ) {}
@@ -48,97 +50,90 @@ export class WalletService {
     firstName: string;
     lastName:  string;
     email:     string;
-    nin?:      string;
     bvn?:      string;
   }) {
     const wallet = await this.prisma.wallet.findUnique({
       where: { userId: user.id },
     });
 
-    if (!wallet) {
-      throw new BadRequestException('Wallet not found — create wallet first');
-    }
+    if (!wallet) throw new BadRequestException('Wallet not found');
 
+    // Already provisioned — return existing
     if (wallet.virtualAccountNuban) {
-      this.logger.log(`Virtual account already exists for user ${user.id}`);
       return {
-        nuban:          wallet.virtualAccountNuban,
+        accountNumber:  wallet.virtualAccountNuban,
         bankName:       wallet.virtual_account_bank,
         accountName:    `${user.firstName} ${user.lastName}`,
         alreadyExisted: true,
-        currency:            'NGN'
+        // If multiple banks stored in metadata
+        accounts:       wallet.virtual_account_meta
+          ? JSON.parse(wallet.virtual_account_meta as string)
+          : null,
       };
     }
 
-    let nuban: string;
-    let bankName: string;
+    const fullName = `${user.firstName} ${user.lastName}`;
 
-    try {
-      const result = await this.buypowerService.createReservedAccount({
-        reference:   user.id,
-        name:        `${user.firstName} ${user.lastName}`,
-        description: `Pay4Light wallet for ${user.email}`,
-        nin:         user.nin,
-        bvn:         user.bvn,
-      });
+    // ✅ Call Monnify to create reserved account
+    const result = await this.monnifyService.createReservedAccount({
+      accountReference: user.id,     // userId as unique reference
+      accountName:      fullName,
+      customerEmail:    user.email,
+      customerName:     fullName,
+      bvn:              user.bvn,
+    });
 
-      console.log('BuyPower reserved account result:', result);
+    this.logger.log('Monnify reserved account result:', JSON.stringify(result));
 
-      nuban    = result?.data?.accountNumber ?? result?.accountNumber;
-      bankName = result?.data?.bankName ?? result?.bankName ?? 'BuyPower MFB';
+    // ✅ Monnify returns array of accounts (one per bank)
+    // accounts: [{ bankName, bankCode, accountNumber }]
+    const accounts = result?.accounts || [];
+    const primary  = accounts[0];
 
-      if (!nuban) {
-        console.error('Full BuyPower response:', JSON.stringify(result, null, 2));
-        throw new Error('BuyPower returned no account number');
-      }
-
-    } catch (error) {
-      this.logger.error(
-        `BuyPower account creation failed for user ${user.id}`,
-        error,
-      );
+    if (!primary?.accountNumber) {
+      this.logger.error('No account number in Monnify response:', result);
       throw new InternalServerErrorException(
         'Could not provision virtual account — please try again',
       );
     }
 
+    // Save primary account + all accounts as metadata
     const updatedWallet = await this.prisma.wallet.update({
       where: { userId: user.id },
       data: {
-        virtualAccountNuban:  nuban,
-        virtual_account_bank: bankName,
+        virtualAccountNuban:  primary.accountNumber,
+        virtual_account_bank: primary.bankName,
         virtual_account_ref:  user.id,
+        virtual_account_meta: JSON.stringify(accounts), // all banks
       },
     });
 
     this.logger.log(
-      `Virtual account provisioned — user: ${user.id}, nuban: ${nuban}`,
+      `Virtual account provisioned — user: ${user.id}, account: ${primary.accountNumber}`,
     );
 
     return {
-      nuban:          updatedWallet.virtualAccountNuban,
+      accountNumber:  updatedWallet.virtualAccountNuban,
       bankName:       updatedWallet.virtual_account_bank,
-      accountName:    `${user.firstName} ${user.lastName}`,
+      accountName:    fullName,
       alreadyExisted: false,
+      accounts,      // ✅ return ALL bank options (Wema, Providus etc.)
     };
   }
 
-  // FIND USER BY NUBAN OR REFERENCE
-  async findUserByNubanOrReference(
-    nuban:     string,
-    reference: string,
-  ): Promise<{ id: string } | null> {
-    const wallet = await this.prisma.wallet.findFirst({
-      where: {
-        OR: [
-          { virtualAccountNuban: nuban },
-          { virtual_account_ref: reference },
-        ],
-      },
-    });
-    if (!wallet) return null;
-    return { id: wallet.userId };
-  }
+async findByAccountNumber(accountNumber: string): Promise<{ id: string } | null> {
+  const wallet = await this.prisma.wallet.findFirst({
+    where: {
+      OR: [
+        { virtualAccountNuban: accountNumber },
+        // ✅ Also check metadata for secondary bank accounts
+      ],
+    },
+  });
+
+  if (!wallet) return null;
+  return { id: wallet.userId };
+}
 
   // CREDIT FROM WEBHOOK
   async creditFromWebhook(

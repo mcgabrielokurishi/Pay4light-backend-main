@@ -12,6 +12,7 @@ import { InitializePaymentDto } from './dto/initialize-payment.dto';
 import { randomUUID } from 'crypto';
 import axios from 'axios';
 import type { AxiosResponse } from 'axios';
+import { MonnifyService } from 'src/monnify/monnify.service';
 
 @Injectable()
 export class PaymentService {
@@ -29,96 +30,61 @@ export class PaymentService {
   constructor(
     private readonly prisma:              PrismaService,
     private readonly walletService:       WalletService,
+    private readonly monnify:        MonnifyService,
     private readonly notificationService: NotificationService,
   ) {}
 
   // ─── STEP 1: INITIALIZE PAYMENT ─────────────────────────────────
-  // User wants to add money — create a Paystack payment link
-  async initializePayment(userId: string, dto: InitializePaymentDto) {
+  async initializePayment(userId: string, dto: { amount: number; redirectUrl?: string }) {
     const user = await this.prisma.user.findUnique({
       where:  { id: userId },
       select: { email: true, fullName: true, firstName: true, lastName: true },
     });
 
-    if (!user) throw new NotFoundException('User not found');
-    if (!user.email) throw new BadRequestException('Email required for payment');
+    if (!user?.email) throw new BadRequestException('User email required');
 
-    const reference = `PAY4L-${randomUUID()}`;
-    const amountInKobo = dto.amount * 100; // Paystack uses kobo
-
-    const wallet = await this.prisma.wallet.findFirst({
-      where:  { userId },
-      select: { id: true },
-    });
-
-    if (!wallet) throw new NotFoundException('Wallet not found');
+    const reference = `P4L-${randomUUID()}`;
+    const fullName  = user.fullName || `${user.firstName} ${user.lastName}`;
 
     // Save pending transaction
     await this.prisma.transaction.create({
       data: {
         userId,
-        walletId:    wallet.id,
         type:        'WALLET_CREDIT',
         amount:      dto.amount,
         status:      'PENDING',
         reference,
-        description: `Wallet funding via Paystack — ₦${dto.amount}`,
-        metadata:    JSON.stringify({ gateway: 'paystack', amountInKobo }),
+        description: `Wallet funding via Monnify — ₦${dto.amount}`,
+        metadata:    JSON.stringify({ gateway: 'monnify' }),
       },
     });
 
-    // Call Paystack initialize
-    const response: AxiosResponse<any> = await axios.post(
-      `${this.paystackBase}/transaction/initialize`,
-      {
-        email:        user.email,
-        amount:       amountInKobo,
-        reference,
-        callback_url: dto.callbackUrl || process.env.PAYSTACK_CALLBACK_URL,
-        metadata: {
-          userId,
-          fullName: user.fullName || `${user.firstName} ${user.lastName}`,
-          custom_fields: [
-            {
-              display_name: 'Purpose',
-              variable_name: 'purpose',
-              value: 'Wallet Funding',
-            },
-          ],
-        },
-      },
-      { headers: this.headers },
-    );
-
-    const data = response.data;
-
-    if (!data.status) {
-      throw new BadRequestException(data.message || 'Failed to initialize payment');
-    }
-
-    this.logger.log(`Payment initialized — ref: ${reference}, amount: ₦${dto.amount}`);
+    // ✅ Initialize Monnify transaction
+    const result = await this.monnify.initializeTransaction({
+      amount:             dto.amount,
+      customerName:       fullName,
+      customerEmail:      user.email,
+      paymentReference:   reference,
+      paymentDescription: 'Pay4Light Wallet Funding',
+      redirectUrl:        dto.redirectUrl,
+    });
 
     return {
-      success:       true,
-      message:       'Payment initialized successfully',
+      success:          true,
       reference,
-      amount:        dto.amount,
-      paymentUrl:    data.data.authorization_url, // ← redirect user here
-      accessCode:    data.data.access_code,
+      amount:           dto.amount,
+      checkoutUrl:      result?.checkoutUrl,      // ✅ Monnify checkout URL
+      transactionRef:   result?.transactionReference,
     };
   }
+ 
 
   // ─── STEP 2: VERIFY PAYMENT ──────────────────────────────────────
   // Called after user returns from Paystack page
   async verifyPayment(reference: string, userId: string) {
-    const response: AxiosResponse<any> = await axios.get(
-      `${this.paystackBase}/transaction/verify/${reference}`,
-      { headers: this.headers },
-    );
+    const result = await this.monnify.getTransactionStatus(reference);
 
-    const data = response.data?.data;
-
-    if (!data || data.status !== 'success') {
+    if (!result || result.paymentStatus !== 'PAID') {
       throw new BadRequestException('Payment not successful');
     }
 
@@ -127,13 +93,12 @@ export class PaymentService {
       where: { reference },
     });
 
-    if (!tx) throw new NotFoundException('Transaction not found');
-    if (tx.userId !== userId) throw new BadRequestException('Unauthorized');
-    if (tx.status === 'SUCCESS') {
-      return { success: true, message: 'Already processed', alreadyCredited: true };
-    }
+   const tx = await this.prisma.transaction.findUnique({ where: { reference } });
+    if (!tx) throw new BadRequestException('Transaction not found');
+    if (tx.status === 'SUCCESS') return { success: true, alreadyCredited: true };
 
-    const amount = data.amount / 100; // convert kobo back to naira
+
+   const amount = result.amountPaid;
 
     // Credit wallet
     await this.walletService.creditFromWebhook(
@@ -190,6 +155,7 @@ export class PaymentService {
 
     this.logger.log(`Card saved for user ${userId} — ${authorization.last4}`);
   }
+  
 
   // ─── GET SAVED CARDS ─────────────────────────────────────────────
   async getSavedCards(userId: string) {
@@ -316,6 +282,26 @@ export class PaymentService {
     });
 
     return { success: true, message: 'Card removed successfully' };
+  }
+   private async saveCardToken(userId: string, cardDetails: any, email: string) {
+    const existing = await this.prisma.savedCard.findFirst({
+      where: { userId, authorizationCode: cardDetails.cardToken },
+    });
+    if (existing) return;
+
+    await this.prisma.savedCard.create({
+      data: {
+        userId,
+        authorizationCode: cardDetails.cardToken,  // ✅ Monnify uses cardToken
+        last4:             cardDetails.last4,
+        cardType:          cardDetails.cardType,
+        expMonth:          cardDetails.expiryMonth,
+        expYear:           cardDetails.expiryYear,
+        brand:             cardDetails.scheme,
+        bank:              cardDetails.issuingBank,
+        email,
+      },
+    });
   }
 
   // ─── HANDLE PAYSTACK WEBHOOK ─────────────────────────────────────
