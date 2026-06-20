@@ -135,6 +135,30 @@ async findByAccountNumber(accountNumber: string): Promise<{ id: string } | null>
   return { id: wallet.userId };
 }
 
+async findUserByNubanOrReference(
+  nuban: string,
+  reference: string,
+): Promise<{ id: string } | null> {
+  // Try matching primary nuban or the stored virtual_account_ref (user-created reference)
+  const wallet = await this.prisma.wallet.findFirst({
+    where: {
+      OR: [
+        { virtualAccountNuban: nuban || undefined },
+        { virtual_account_ref: reference || undefined },
+        // also check metadata (virtual_account_meta) which may contain other account numbers
+        {
+          virtual_account_meta: {
+            contains: nuban || reference || '',
+          },
+        },
+      ],
+    },
+  });
+
+  if (!wallet) return null;
+  return { id: wallet.userId };
+}
+
   // CREDIT FROM WEBHOOK
   async creditFromWebhook(
     userId:      string,

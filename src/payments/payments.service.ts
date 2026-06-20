@@ -46,10 +46,18 @@ export class PaymentService {
     const reference = `P4L-${randomUUID()}`;
     const fullName  = user.fullName || `${user.firstName} ${user.lastName}`;
 
+    // Ensure wallet exists and save pending transaction with walletId
+    let wallet = await this.prisma.wallet.findUnique({ where: { userId }, select: { id: true } });
+    if (!wallet) {
+      // create wallet for user if missing
+      wallet = await this.walletService.createWalletForUser(userId);
+    }
+
     // Save pending transaction
     await this.prisma.transaction.create({
       data: {
         userId,
+        walletId:    (wallet as any).id,
         type:        'WALLET_CREDIT',
         amount:      dto.amount,
         status:      'PENDING',
@@ -89,16 +97,11 @@ export class PaymentService {
     }
 
     // Check it belongs to this user
-    const tx = await this.prisma.transaction.findUnique({
-      where: { reference },
-    });
-
-   const tx = await this.prisma.transaction.findUnique({ where: { reference } });
+    const tx = await this.prisma.transaction.findUnique({ where: { reference } });
     if (!tx) throw new BadRequestException('Transaction not found');
     if (tx.status === 'SUCCESS') return { success: true, alreadyCredited: true };
 
-
-   const amount = result.amountPaid;
+    const amount = result.amountPaid || tx.amount;
 
     // Credit wallet
     await this.walletService.creditFromWebhook(
@@ -108,9 +111,14 @@ export class PaymentService {
       { description: `Wallet funded via card — ₦${amount}` },
     );
 
-    // Save card for future use if authorization exists
-    if (data.authorization?.reusable) {
-      await this.saveCard(userId, data.authorization, data.customer);
+    // Save card for future use if authorization exists (Monnify may include authorization/customer)
+    try {
+      if ((result as any).authorization?.reusable) {
+        await this.saveCard(userId, (result as any).authorization, (result as any).customer);
+      }
+    } catch (err) {
+      const msg = (err as any)?.message ?? String(err);
+      this.logger.warn('Failed to save card from Monnify response', msg);
     }
 
     // Notify user
