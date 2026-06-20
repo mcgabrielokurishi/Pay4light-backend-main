@@ -4,6 +4,7 @@ import { WalletController } from "./wallet.controller";
 import { PrismaModule } from "database/database.module";
 import { AuthModule } from "../auth/auth.module";
 import { NotificationModule } from "src/notification/notification.module";
+import { MailModule } from 'src/common/services/mail.module';
 import { MonnifyModule } from "src/monnify/monnify.module";
 import { BuypowerModule } from "../buypower/buypower.module";
 import { forwardRef } from "@nestjs/common";
@@ -11,7 +12,7 @@ import { NotificationSettingsModule } from "src/notification-settings/notificati
 import { PushNotificationModule } from "src/push-notification/push-notification.module";
 
 @Module({
-  imports: [PrismaModule,NotificationModule,NotificationSettingsModule, AuthModule,PushNotificationModule, BuypowerModule,MonnifyModule,forwardRef(() => AuthModule)],
+  imports: [PrismaModule,NotificationModule,NotificationSettingsModule, AuthModule,PushNotificationModule, BuypowerModule,MonnifyModule,MailModule,forwardRef(() => AuthModule)],
   controllers: [WalletController],
   providers: [WalletService],
   exports: [WalletService],
