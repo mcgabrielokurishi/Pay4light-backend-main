@@ -93,7 +93,7 @@ export class WebhookController {
     }
 
     // ✅ Find user by account number
-    let wallet = null;
+    let wallet: { id: string } | null = null;
 
     if (accountNumber) {
       wallet = await this.walletService.findByAccountNumber(accountNumber);
@@ -116,7 +116,7 @@ export class WebhookController {
       return { received: true, error: 'Wallet not found' };
     }
 
-    const userId = wallet.id || (wallet as any).userId;
+    const userId = wallet.id;
 
     // ✅ Credit wallet
     try {
