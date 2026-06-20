@@ -3,10 +3,11 @@ import { Module } from '@nestjs/common';
 import { PaymentController } from './payments.controller';
 import { PaymentService } from './payments.service';
 import { WalletModule } from 'src/wallet/wallet.module';
+import { MonnifyModule } from 'src/monnify/monnify.module';
 import { NotificationModule } from 'src/notification/notification.module';
 
 @Module({
-  imports: [WalletModule, NotificationModule],
+  imports: [WalletModule, NotificationModule, MonnifyModule],
   controllers: [PaymentController],
   providers:   [PaymentService],
   exports:     [PaymentService],

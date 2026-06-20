@@ -23,6 +23,7 @@ import { InformationModule } from "./information/information.module";
 import { ForecastModule } from "./forcast/forcast.module";
 import { ScheduleModule } from "@nestjs/schedule";
 import { RequeryModule } from "./requery/requery.module";
+import { MonnifyModule } from "./monnify/monnify.module";
 import { NotificationSettingsModule } from "./notification-settings/notification-settings.module";
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { NotificationSettingsModule } from "./notification-settings/notification
     TransactionsModule,
     UsersModule,
     NotificationModule,
+    MonnifyModule,
     AdminModule,
     BankAccountModule,
     CardModule,
