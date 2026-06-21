@@ -81,6 +81,7 @@ export class WalletService {
       customerEmail:    user.email,
       customerName:     fullName,
       bvn:              user.bvn,
+      nin:              '95791401413'
     });
 
     this.logger.log('Monnify reserved account result:', JSON.stringify(result));

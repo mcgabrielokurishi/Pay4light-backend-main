@@ -81,47 +81,51 @@ export class MonnifyService {
 
   // ─── CREATE RESERVED ACCOUNT ─────────────────────────────────────
   // POST /api/v2/bank-transfer/reserved-accounts
-  async createReservedAccount(data: {
-    accountReference: string; // unique per user — use userId
-    accountName:      string; // user's full name
-    customerEmail:    string;
-    customerName:     string;
-    bvn?:             string;
-  }) {
-    try {
-      const headers = await this.authHeaders();
+ async createReservedAccount(data: {
+  accountReference: string;
+  accountName:      string;
+  customerEmail:    string;
+  customerName:     string;
+  bvn?:             string;
+  nin?:             string; // ✅ add this
+}) {
+  try {
+    const headers = await this.authHeaders();
 
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.baseUrl}/api/v2/bank-transfer/reserved-accounts`,
-          {
-            accountReference:  data.accountReference,
-            accountName:       data.accountName,
-            currencyCode:      'NGN',
-            contractCode:      this.contractCode,
-            customerEmail:     data.customerEmail,
-            customerName:      data.customerName,
-            getAllAvailableBanks: true, // ✅ get multiple bank options
-            ...(data.bvn ? { bvn: data.bvn } : {}),
-          },
-          { headers, timeout: 30000 },
-        ),
-      );
+    const response = await firstValueFrom(
+      this.httpService.post(
+        `${this.baseUrl}/api/v2/bank-transfer/reserved-accounts`,
+        {
+          accountReference:    data.accountReference,
+          accountName:         data.accountName,
+          currencyCode:        'NGN',
+          contractCode:        this.contractCode,
+          customerEmail:       data.customerEmail,
+          customerName:        data.customerName,
+          getAllAvailableBanks: true,
+          ...(data.bvn ? { bvn: data.bvn } : {}),
+          ...(data.nin ? { nin: data.nin } : {}), // ✅ add NIN to payload
+        },
+        { headers, timeout: 30000 },
+      ),
+    );
 
-      const body = response.data?.responseBody;
-      this.logger.log(`Reserved account created: ${JSON.stringify(body)}`);
-      return body;
+    const body = response.data?.responseBody;
+    this.logger.log(`Reserved account created: ${JSON.stringify(body)}`);
+    return body;
 
-    } catch (error) {
-      const axiosError = error as any;
-      this.logger.error('Create reserved account failed:', axiosError?.response?.data);
-      throw new BadRequestException(
-        axiosError?.response?.data?.responseMessage ||
-        'Failed to create reserved account',
-      );
-    }
+  } catch (error) {
+    const axiosError = error as any;
+    this.logger.error(
+      'Create reserved account failed:',
+      axiosError?.response?.data,
+    );
+    throw new BadRequestException(
+      axiosError?.response?.data?.responseMessage ||
+      'Failed to create reserved account',
+    );
   }
-
+}
   // ─── GET RESERVED ACCOUNT DETAILS ────────────────────────────────
   // GET /api/v2/bank-transfer/reserved-accounts/{accountReference}
   async getReservedAccount(accountReference: string) {
