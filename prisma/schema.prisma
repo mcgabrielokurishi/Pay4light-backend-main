@@ -434,6 +434,18 @@ model Document {
   @@index([applicationId])
 }
 
+model RevenueEntry {
+  id          String   @id @default(cuid())
+  userId      String   // who paid the charge
+  amount      Float    // e.g 100
+  type        String   // ELECTRICITY, TV, DATA
+  reference   String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
 enum DocumentType {
   NATIONAL_ID
   PASSPORT

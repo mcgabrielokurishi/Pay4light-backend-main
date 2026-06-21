@@ -113,259 +113,222 @@ export class VendingService {
   }
 
   // ─── VEND ELECTRICITY ─────────────────────────────────────────────
-  async vendElectricity(userId: string, dto: VendElectricityDto) {
-    const orderId   = randomUUID();
-    const amount    = new Prisma.Decimal(dto.amount.toString());
-    const reference = orderId;
+ async vendElectricity(userId: string, dto: VendElectricityDto) {
+  const SERVICE_CHARGE = 100; // ₦100 per vend
+  const totalAmount    = dto.amount + SERVICE_CHARGE; // e.g ₦500 + ₦100 = ₦600
+  const orderId        = randomUUID();
+  const amount         = new Prisma.Decimal(dto.amount.toString());
+  const reference      = orderId;
 
-    // ✅ CHECK 1 — User wallet balance
-    const userWallet = await this.prisma.wallet.findUnique({
-      where: { userId },
-    });
-
-    if (!userWallet) {
-      throw new BadRequestException('Wallet not found');
-    }
-
-    if (userWallet.locked) {
-      throw new BadRequestException('Your wallet is locked. Contact support.');
-    }
-
-    if (Number(userWallet.balance) < dto.amount) {
-      throw new BadRequestException(
-        `Insufficient wallet balance. Your balance is ₦${Number(userWallet.balance).toLocaleString()} but you need ₦${dto.amount.toLocaleString()}. Please fund your wallet.`,
-      );
-    }
-
-    // ✅ CHECK 2 — BuyPower company wallet balance
-    const bpBalance = await this.getBuyPowerBalance();
-
-    if (bpBalance < dto.amount) {
-      this.logger.warn(
-        `BuyPower balance too low — bp: ${bpBalance}, needed: ${dto.amount}`,
-      );
-      throw new BadRequestException(
-        'Service temporarily unavailable. Please try again in a few minutes.',
-      );
-    }
-
-    // Get user info
-    const user = await this.prisma.user.findUnique({
-      where:  { id: userId },
-      select: { email: true, fullName: true, firstName: true, lastName: true },
-    });
-
-    const customerName =
-      dto.name ||
-      user?.fullName ||
-      `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() ||
-      'Pay4Light Customer';
-
-    // Save PENDING transaction
-    await this.prisma.vendorTransaction.create({
-      data: {
-        userId,
-        reference,
-        provider:       'BUYPOWER',
-        serviceType:    'ELECTRICITY',
-        meterID:        dto.meter,
-        amount:         amount.toNumber(),
-        status:         'PENDING',
-        requestPayload: JSON.parse(JSON.stringify(dto)),
-      },
-    });
-
-    // Debit wallet
-    await this.walletService.debitWithIdempotency(
-      userId,
-      amount,
-      reference,
-      `Electricity purchase — ${dto.disco} meter ${dto.meter}`,
-    );
-
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.baseUrl}/v2/vend`,
-          {
-            orderId,
-            meter:       dto.meter,
-            disco:       dto.disco,
-            vendType:    dto.vendType,
-            paymentType: 'B2B',
-            vertical:    'ELECTRICITY',
-            amount:      dto.amount.toString(),
-            phone:       dto.phone,
-            email:       dto.email || user?.email || '',
-            name:        customerName,
-          },
-          { headers: this.headers, timeout: 60000 },
-        ),
-      );
-
-      const data         = response.data;
-      const responseCode = data?.responseCode ?? data?.data?.responseCode;
-
-      // PENDING
-      if ([202, 500, 502, 503].includes(responseCode)) {
-        this.logger.warn(`Vend pending — orderId: ${orderId}`);
-        await this.prisma.vendorTransaction.update({
-          where: { reference },
-          data:  { status: 'PENDING', responsePayload: data },
-        });
-
-        return {
-          success:   false,
-          pending:   true,
-          message:   'Transaction is being processed. Please check back shortly.',
-          orderId,
-          reference,
-        };
-      }
-
-      // SUCCESS
-      if (data?.status === true && responseCode === 200) {
-  const vendData = data.data;
-
-  await this.prisma.vendorTransaction.update({
-    where: { reference },
-    data: {
-      status:          'SUCCESS',
-      responsePayload: data,
-      token:           vendData?.token,
-      units:           vendData?.units?.toString(),
-    },
+  // ✅ Check user wallet has enough for amount + service charge
+  const userWallet = await this.prisma.wallet.findUnique({
+    where: { userId },
   });
 
-  // ✅ Get user details for email
-  const userDetails = await this.prisma.user.findUnique({
-    where:  { id: userId },
-    select: {
-      email:     true,
-      fullName:  true,
-      firstName: true,
-      lastName:  true,
-    },
-  });
+  if (!userWallet) throw new BadRequestException('Wallet not found');
+  if (userWallet.locked) throw new BadRequestException('Wallet is locked');
 
-  // ✅ Get meter details
-  const meter = await this.prisma.meter.findFirst({
-    where:   { meterNumber: dto.meter },
-    include: { disco: true },
-  });
-
-  const firstName =
-    userDetails?.firstName ||
-    userDetails?.fullName?.split(' ')[0] ||
-    'Customer';
-
-  const now = new Date().toLocaleString('en-NG', {
-    timeZone:    'Africa/Lagos',
-    day:         'numeric',
-    month:       'long',
-    year:        'numeric',
-    hour:        '2-digit',
-    minute:      '2-digit',
-  });
-
-  // ✅ Send email with token
-  if (userDetails?.email) {
-    this.mailService.sendEmail(
-      userDetails.email,
-      '⚡ Meter Recharged — Your Token is Ready',
-      getMeterRechargeEmail({
-        firstName,
-        amount:        dto.amount,
-        units:         vendData?.units?.toString() || '0',
-        meterNumber:   dto.meter,
-        token:         vendData?.token || '',
-        disco:         meter?.disco?.name || dto.disco,
-        reference,
-        date:          now,
-        paymentMethod: 'Wallet',
-        meterNickname: meter?.address || 'My Meter',
-      }),
-    ).catch((err) =>
-      this.logger.error(`Failed to send recharge email: ${err.message}`),
+  if (Number(userWallet.balance) < totalAmount) {
+    throw new BadRequestException(
+      `Insufficient balance. You need ₦${totalAmount.toLocaleString()} ` +
+      `(₦${dto.amount} electricity + ₦${SERVICE_CHARGE} service charge). ` +
+      `Your balance is ₦${Number(userWallet.balance).toLocaleString()}.`,
     );
   }
 
-  // In-app + push notifications
-  await Promise.all([
-    this.notificationService.notifyElectricity(
-      userId,
-      `⚡ Token ready: ${vendData?.token}. Units: ${vendData?.units} kWh`,
-      { token: vendData?.token, units: vendData?.units, orderId },
-    ),
-    this.push.notifyElectricityPurchased(
-      userId,
-      vendData?.token,
-      vendData?.units,
-      dto.amount,
-    ),
-  ]);
+  // ✅ Notify user about service charge BEFORE deducting
+  await this.notificationService.create({
+    userId,
+    title:   '💡 Service Charge Notice',
+    message: `A service charge of ₦${SERVICE_CHARGE} will be deducted alongside your ₦${dto.amount} electricity purchase. Total: ₦${totalAmount}.`,
+    type:    'INFO',
+  });
 
-  return {
-    success: true,
-    message: 'Electricity purchased successfully',
+  // Get user info
+  const user = await this.prisma.user.findUnique({
+    where:  { id: userId },
+    select: { email: true, fullName: true, firstName: true, lastName: true },
+  });
+
+  const customerName =
+    dto.name ||
+    user?.fullName ||
+    `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() ||
+    'Pay4Light Customer';
+
+  // ✅ Save pending transaction
+  await this.prisma.vendorTransaction.create({
     data: {
-      orderId,
+      userId,
       reference,
-      token:           vendData?.token,
-      units:           vendData?.units,
-      amountPaid:      vendData?.totalAmountPaid,
-      amountGenerated: vendData?.amountGenerated,
-      tax:             vendData?.tax,
-      receiptNo:       vendData?.receiptNo,
-      disco:           vendData?.disco,
-      debtAmount:      vendData?.debtAmount,
-      debtRemaining:   vendData?.debtRemaining,
+      provider:       'BUYPOWER',
+      serviceType:    'ELECTRICITY',
+      meterID:        dto.meter,
+      amount:         dto.amount,   // actual electricity amount only
+      status:         'PENDING',
+      requestPayload: JSON.parse(JSON.stringify(dto)),
     },
-  };
-}
+  });
 
-      throw new Error(data?.message || 'Vending failed');
+  // ✅ Debit TOTAL (electricity + service charge) from wallet
+  const totalDecimal = new Prisma.Decimal(totalAmount.toString());
+  await this.walletService.debitWithIdempotency(
+    userId,
+    totalDecimal,
+    reference,
+    `Electricity ₦${dto.amount} + Service charge ₦${SERVICE_CHARGE}`,
+  );
 
-    } catch (error) {
-      const axiosError   = error as any;
-      const errorData    = axiosError?.response?.data;
-      const errorMsg     = errorData?.message || axiosError?.message || 'Vending failed';
-      const responseCode = errorData?.responseCode;
+  // ✅ Record the ₦100 service charge as revenue
+  await this.prisma.revenueEntry.create({
+    data: {
+      userId,
+      amount:      SERVICE_CHARGE,
+      type:        'ELECTRICITY',
+      reference:   `svc-${reference}`,
+      description: `Service charge for electricity vend — meter ${dto.meter}`,
+    },
+  });
 
-      this.logger.error(`Vending failed — orderId: ${orderId}`, errorData);
-
-      if ([202, 500, 502, 503].includes(responseCode)) {
-        await this.prisma.vendorTransaction.update({
-          where: { reference },
-          data:  { status: 'PENDING', responsePayload: errorData },
-        });
-
-        return {
-          success:   false,
-          pending:   true,
-          message:   'Transaction is being processed. Re-query after 2 minutes.',
+  try {
+    // Call BuyPower with ORIGINAL amount (not total)
+    const response = await firstValueFrom(
+      this.httpService.post(
+        `${this.baseUrl}/v2/vend`,
+        {
           orderId,
-          reference,
-        };
-      }
+          meter:       dto.meter,
+          disco:       dto.disco,
+          vendType:    dto.vendType,
+          paymentType: 'B2B',
+          vertical:    'ELECTRICITY',
+          amount:      dto.amount.toString(), // ← only electricity amount to BuyPower
+          phone:       dto.phone,
+          email:       dto.email || user?.email || '',
+          name:        customerName,
+        },
+        { headers: this.headers, timeout: 60000 },
+      ),
+    );
 
-      // Refund wallet
-      await this.walletService.credit(
-        userId,
-        amount,
-        `Refund — electricity purchase failed (${orderId})`,
-      );
+    const data         = response.data;
+    const responseCode = data?.responseCode ?? data?.data?.responseCode;
+
+    // PENDING
+    if ([202, 500, 502, 503].includes(responseCode)) {
+      await this.prisma.vendorTransaction.update({
+        where: { reference },
+        data:  { status: 'PENDING', responsePayload: data },
+      });
+
+      return {
+        success:       false,
+        pending:       true,
+        message:       'Transaction is being processed. Please check back shortly.',
+        orderId,
+        reference,
+        amountPaid:    dto.amount,
+        serviceCharge: SERVICE_CHARGE,
+        totalDeducted: totalAmount,
+      };
+    }
+
+    // SUCCESS
+    if (data?.status === true && responseCode === 200) {
+      const vendData = data.data;
 
       await this.prisma.vendorTransaction.update({
         where: { reference },
-        data:  { status: 'FAILED', responsePayload: errorData || errorMsg },
+        data: {
+          status:          'SUCCESS',
+          responsePayload: data,
+          token:           vendData?.token,
+          units:           vendData?.units?.toString(),
+        },
       });
 
-      throw new BadRequestException(
-        `Vending failed. Wallet refunded. Reason: ${errorMsg}`,
-      );
+      // ✅ Notify success with full breakdown
+      await Promise.all([
+        this.notificationService.create({
+          userId,
+          title:   '⚡ Electricity Purchased Successfully',
+          message: `Token: ${vendData?.token} | Units: ${vendData?.units} kWh | ₦${dto.amount} electricity + ₦${SERVICE_CHARGE} service charge deducted.`,
+          type:    'ELECTRICITY',
+        }),
+        this.push.notifyElectricityPurchased(
+          userId,
+          vendData?.token,
+          vendData?.units,
+          dto.amount,
+        ),
+      ]);
+
+      return {
+        success:       true,
+        message:       'Electricity purchased successfully',
+        serviceCharge: SERVICE_CHARGE,
+        totalDeducted: totalAmount,
+        data: {
+          orderId,
+          reference,
+          token:           vendData?.token,
+          units:           vendData?.units,
+          amountPaid:      dto.amount,
+          serviceCharge:   SERVICE_CHARGE,
+          totalDeducted:   totalAmount,
+          amountGenerated: vendData?.amountGenerated,
+          tax:             vendData?.tax,
+          receiptNo:       vendData?.receiptNo,
+          disco:           vendData?.disco,
+        },
+      };
     }
+
+    throw new Error(data?.message || 'Vending failed');
+
+  } catch (error) {
+    const axiosError   = error as any;
+    const errorData    = axiosError?.response?.data;
+    const errorMsg     = errorData?.message || axiosError?.message || 'Vending failed';
+    const responseCode = errorData?.responseCode;
+
+    if ([202, 500, 502, 503].includes(responseCode)) {
+      await this.prisma.vendorTransaction.update({
+        where: { reference },
+        data:  { status: 'PENDING', responsePayload: errorData },
+      });
+
+      return {
+        success:   false,
+        pending:   true,
+        message:   'Transaction is being processed. Re-query after 2 minutes.',
+        orderId,
+        reference,
+      };
+    }
+
+    // ✅ Refund FULL amount including service charge on failure
+    await this.walletService.credit(
+      userId,
+      totalDecimal,
+      `Refund — electricity purchase failed (${orderId}) including service charge`,
+    );
+
+    // ✅ Remove the revenue entry since vend failed
+    await this.prisma.revenueEntry.deleteMany({
+      where: { reference: `svc-${reference}` },
+    });
+
+    await this.prisma.vendorTransaction.update({
+      where: { reference },
+      data:  { status: 'FAILED', responsePayload: errorData || errorMsg },
+    });
+
+    throw new BadRequestException(
+      `Vending failed. Full amount of ₦${totalAmount} (including service charge) refunded. Reason: ${errorMsg}`,
+    );
   }
+}
 
   // ─── VEND TV ─────────────────────────────────────────────────────
   async vendTv(userId: string, dto: VendTvDto) {
