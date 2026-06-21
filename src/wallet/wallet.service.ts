@@ -295,46 +295,7 @@ async findUserByNubanOrReference(
     });
   }
 
-  // DEBIT
-  async debit(
-    userId:      string,
-    amount:      Prisma.Decimal,
-    description = "Wallet debit",
-  ) {
-    if (amount.lte(0)) throw new BadRequestException("Invalid amount");
 
-    return this.prisma.$transaction(async (tx) => {
-      const wallet = await tx.wallet.findUnique({ where: { userId } });
-      if (!wallet) throw new BadRequestException("Wallet not found");
-      if (wallet.locked) throw new ForbiddenException("Wallet is locked");
-      if (wallet.balance < amount.toNumber())
-        throw new BadRequestException("Insufficient balance");
-
-      const updatedWallet = await tx.wallet.update({
-        where: { id: wallet.id },
-        data:  { balance: { decrement: amount.toNumber() } },
-      });
-
-      const transaction = await tx.transaction.create({
-        data: {
-          userId,
-          walletId:    wallet.id,
-          type:        "WALLET_DEBIT",
-          amount:      amount.toNumber(),
-          status:      "SUCCESS",
-          reference:   randomUUID(),
-          description,
-          meterId:     "",
-          metadata:    JSON.stringify({}),
-        },
-      });
-
-      // ✅ Push notification
-      await this.push.notifyWalletDebited(userId, amount.toNumber());
-
-      return { wallet: updatedWallet, transaction };
-    });
-  }
   // Add inside WalletService class
 async getAllWalletNubans() {
   return this.prisma.wallet.findMany({
@@ -348,54 +309,94 @@ async getAllWalletNubans() {
 }
 
   // DEBIT WITH IDEMPOTENCY
-  async debitWithIdempotency(
-    userId:      string,
-    amount:      Prisma.Decimal,
-    reference:   string,
-    description = "Wallet debit",
-  ) {
-    if (amount.lte(0)) throw new BadRequestException("Invalid amount");
+  // ─── DEBIT WITH IDEMPOTENCY ───────────────────────────────────────
+async debitWithIdempotency(
+  userId:      string,
+  amount:      Prisma.Decimal,
+  reference:   string,
+  description = 'Wallet debit',
+) {
+  if (amount.lte(0)) throw new BadRequestException('Invalid amount');
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.transaction.findUnique({ where: { reference } });
-      if (existing) {
-        const wallet = await tx.wallet.findUnique({ where: { userId } });
-        return { wallet, transaction: existing, duplicated: true };
-      }
-
+  const result = await this.prisma.$transaction(async (tx) => {
+    const existing = await tx.transaction.findUnique({ where: { reference } });
+    if (existing) {
       const wallet = await tx.wallet.findUnique({ where: { userId } });
-      if (!wallet) throw new BadRequestException("Wallet not found");
-      if (wallet.locked) throw new ForbiddenException("Wallet is locked");
-      if (wallet.balance < amount.toNumber())
-        throw new BadRequestException("Insufficient balance");
-
-      const updatedWallet = await tx.wallet.update({
-        where: { id: wallet.id },
-        data:  { balance: { decrement: amount.toNumber() } },
-      });
-
-      const transaction = await tx.transaction.create({
-        data: {
-          userId,
-          walletId:    wallet.id,
-          type:        "WALLET_DEBIT",
-          amount:      amount.toNumber(),
-          reference,
-          meterId:     "",
-          status:      "SUCCESS",
-          description,
-          metadata:    JSON.stringify({}),
-        },
-      });
-
-      return { wallet: updatedWallet, transaction, duplicated: false };
-    });
-
-    // ✅ Push notification AFTER transaction (fixed — was unreachable before)
-    if (!result.duplicated) {
-      await this.push.notifyWalletDebited(userId, amount.toNumber());
+      return { wallet, transaction: existing, duplicated: true };
     }
 
-    return result;
+    const wallet = await tx.wallet.findUnique({ where: { userId } });
+    if (!wallet) throw new BadRequestException('Wallet not found');
+    if (wallet.locked) throw new ForbiddenException('Wallet is locked');
+    if (wallet.balance < amount.toNumber())
+      throw new BadRequestException('Insufficient balance');
+
+    const updatedWallet = await tx.wallet.update({
+      where: { id: wallet.id },
+      data:  { balance: { decrement: amount.toNumber() } },
+    });
+
+    const transaction = await tx.transaction.create({
+      data: {
+        userId,
+        walletId:    wallet.id,
+        type:        'WALLET_DEBIT',
+        amount:      amount.toNumber(),
+        reference,
+        status:      'SUCCESS',
+        description,
+        metadata:    JSON.stringify({}),
+        // ✅ Remove meterId completely — don't pass empty string
+      },
+    });
+
+    return { wallet: updatedWallet, transaction, duplicated: false };
+  });
+
+  if (!result.duplicated) {
+    await this.push.notifyWalletDebited(userId, amount.toNumber());
   }
+
+  return result;
+}
+
+// ─── DEBIT ────────────────────────────────────────────────────────
+async debit(
+  userId:      string,
+  amount:      Prisma.Decimal,
+  description = 'Wallet debit',
+) {
+  if (amount.lte(0)) throw new BadRequestException('Invalid amount');
+
+  return this.prisma.$transaction(async (tx) => {
+    const wallet = await tx.wallet.findUnique({ where: { userId } });
+    if (!wallet) throw new BadRequestException('Wallet not found');
+    if (wallet.locked) throw new ForbiddenException('Wallet is locked');
+    if (wallet.balance < amount.toNumber())
+      throw new BadRequestException('Insufficient balance');
+
+    const updatedWallet = await tx.wallet.update({
+      where: { id: wallet.id },
+      data:  { balance: { decrement: amount.toNumber() } },
+    });
+
+    const transaction = await tx.transaction.create({
+      data: {
+        userId,
+        walletId:    wallet.id,
+        type:        'WALLET_DEBIT',
+        amount:      amount.toNumber(),
+        status:      'SUCCESS',
+        reference:   randomUUID(),
+        description,
+        metadata:    JSON.stringify({}),
+        // ✅ No meterId here either
+      },
+    });
+
+    await this.push.notifyWalletDebited(userId, amount.toNumber());
+
+    return { wallet: updatedWallet, transaction };
+  });
+}
 }
