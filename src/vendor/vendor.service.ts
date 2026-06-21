@@ -114,40 +114,38 @@ export class VendingService {
 
   // ─── VEND ELECTRICITY ─────────────────────────────────────────────
  async vendElectricity(userId: string, dto: VendElectricityDto) {
-  const SERVICE_CHARGE = 100; // ₦100 per vend
-  const totalAmount    = dto.amount + SERVICE_CHARGE; // e.g ₦500 + ₦100 = ₦600
+  const SERVICE_CHARGE = 100;
+  const totalAmount    = dto.amount + SERVICE_CHARGE;
   const orderId        = randomUUID();
-  const amount         = new Prisma.Decimal(dto.amount.toString());
   const reference      = orderId;
+  const amount         = new Prisma.Decimal(dto.amount.toString());
+  const totalDecimal   = new Prisma.Decimal(totalAmount.toString());
 
-  // ✅ Check user wallet has enough for amount + service charge
+  // ─── WALLET CHECKS ───────────────────────────────────────────────
   const userWallet = await this.prisma.wallet.findUnique({
     where: { userId },
   });
 
   if (!userWallet) throw new BadRequestException('Wallet not found');
-  if (userWallet.locked) throw new BadRequestException('Wallet is locked');
+  if (userWallet.locked) throw new BadRequestException('Wallet is locked. Contact support.');
 
   if (Number(userWallet.balance) < totalAmount) {
     throw new BadRequestException(
       `Insufficient balance. You need ₦${totalAmount.toLocaleString()} ` +
-      `(₦${dto.amount} electricity + ₦${SERVICE_CHARGE} service charge). ` +
+      `(₦${dto.amount.toLocaleString()} electricity + ₦${SERVICE_CHARGE} service charge). ` +
       `Your balance is ₦${Number(userWallet.balance).toLocaleString()}.`,
     );
   }
 
-  // ✅ Notify user about service charge BEFORE deducting
-  await this.notificationService.create({
-    userId,
-    title:   '💡 Service Charge Notice',
-    message: `A service charge of ₦${SERVICE_CHARGE} will be deducted alongside your ₦${dto.amount} electricity purchase. Total: ₦${totalAmount}.`,
-    type:    'INFO',
-  });
-
-  // Get user info
+  // ─── GET USER INFO ───────────────────────────────────────────────
   const user = await this.prisma.user.findUnique({
     where:  { id: userId },
-    select: { email: true, fullName: true, firstName: true, lastName: true },
+    select: {
+      email:     true,
+      fullName:  true,
+      firstName: true,
+      lastName:  true,
+    },
   });
 
   const customerName =
@@ -156,7 +154,21 @@ export class VendingService {
     `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() ||
     'Pay4Light Customer';
 
-  // ✅ Save pending transaction
+  const firstName =
+    user?.firstName ||
+    user?.fullName?.split(' ')[0] ||
+    'Customer';
+
+  // ─── NOTIFY USER ABOUT SERVICE CHARGE ───────────────────────────
+  await this.notificationService.create({
+    userId,
+    title:   '💡 Service Charge Notice',
+    message: `A service charge of ₦${SERVICE_CHARGE} will be deducted alongside your ` +
+             `₦${dto.amount.toLocaleString()} electricity purchase. Total: ₦${totalAmount.toLocaleString()}.`,
+    type:    'INFO',
+  });
+
+  // ─── SAVE PENDING TRANSACTION ────────────────────────────────────
   await this.prisma.vendorTransaction.create({
     data: {
       userId,
@@ -164,22 +176,21 @@ export class VendingService {
       provider:       'BUYPOWER',
       serviceType:    'ELECTRICITY',
       meterID:        dto.meter,
-      amount:         dto.amount,   // actual electricity amount only
+      amount:         dto.amount,
       status:         'PENDING',
       requestPayload: JSON.parse(JSON.stringify(dto)),
     },
   });
 
-  // ✅ Debit TOTAL (electricity + service charge) from wallet
-  const totalDecimal = new Prisma.Decimal(totalAmount.toString());
+  // ─── DEBIT WALLET (electricity + service charge) ─────────────────
   await this.walletService.debitWithIdempotency(
     userId,
     totalDecimal,
     reference,
-    `Electricity ₦${dto.amount} + Service charge ₦${SERVICE_CHARGE}`,
+    `Electricity ₦${dto.amount.toLocaleString()} + Service charge ₦${SERVICE_CHARGE}`,
   );
 
-  // ✅ Record the ₦100 service charge as revenue
+  // ─── RECORD SERVICE CHARGE AS REVENUE ───────────────────────────
   await this.prisma.revenueEntry.create({
     data: {
       userId,
@@ -190,8 +201,8 @@ export class VendingService {
     },
   });
 
+  // ─── CALL BUYPOWER ───────────────────────────────────────────────
   try {
-    // Call BuyPower with ORIGINAL amount (not total)
     const response = await firstValueFrom(
       this.httpService.post(
         `${this.baseUrl}/v2/vend`,
@@ -202,7 +213,7 @@ export class VendingService {
           vendType:    dto.vendType,
           paymentType: 'B2B',
           vertical:    'ELECTRICITY',
-          amount:      dto.amount.toString(), // ← only electricity amount to BuyPower
+          amount:      dto.amount.toString(), // original amount only — not total
           phone:       dto.phone,
           email:       dto.email || user?.email || '',
           name:        customerName,
@@ -214,7 +225,7 @@ export class VendingService {
     const data         = response.data;
     const responseCode = data?.responseCode ?? data?.data?.responseCode;
 
-    // PENDING
+    // ─── PENDING ─────────────────────────────────────────────────
     if ([202, 500, 502, 503].includes(responseCode)) {
       await this.prisma.vendorTransaction.update({
         where: { reference },
@@ -233,7 +244,7 @@ export class VendingService {
       };
     }
 
-    // SUCCESS
+    // ─── SUCCESS ─────────────────────────────────────────────────
     if (data?.status === true && responseCode === 200) {
       const vendData = data.data;
 
@@ -247,12 +258,50 @@ export class VendingService {
         },
       });
 
-      // ✅ Notify success with full breakdown
+      // Get meter details for email
+      const meter = await this.prisma.meter.findFirst({
+        where:   { meterNumber: dto.meter },
+        include: { disco: true },
+      });
+
+      const now = new Date().toLocaleString('en-NG', {
+        timeZone: 'Africa/Lagos',
+        day:      'numeric',
+        month:    'long',
+        year:     'numeric',
+        hour:     '2-digit',
+        minute:   '2-digit',
+      });
+
+      // Send email receipt
+      if (user?.email) {
+        this.mailService.sendEmail(
+          user.email,
+          '⚡ Meter Recharged — Your Token is Ready',
+          getMeterRechargeEmail({
+            firstName,
+            amount:        dto.amount,
+            units:         vendData?.units?.toString() || '0',
+            meterNumber:   dto.meter,
+            token:         vendData?.token || '',
+            disco:         meter?.disco?.name || dto.disco,
+            reference,
+            date:          now,
+            paymentMethod: 'Wallet',
+            meterNickname: meter?.address || 'My Meter',
+          }),
+        ).catch((err) =>
+          this.logger.error(`Failed to send recharge email: ${err.message}`),
+        );
+      }
+
+      // In-app + push notifications
       await Promise.all([
         this.notificationService.create({
           userId,
           title:   '⚡ Electricity Purchased Successfully',
-          message: `Token: ${vendData?.token} | Units: ${vendData?.units} kWh | ₦${dto.amount} electricity + ₦${SERVICE_CHARGE} service charge deducted.`,
+          message: `Token: ${vendData?.token} | Units: ${vendData?.units} kWh | ` +
+                   `₦${dto.amount.toLocaleString()} electricity + ₦${SERVICE_CHARGE} service charge deducted.`,
           type:    'ELECTRICITY',
         }),
         this.push.notifyElectricityPurchased(
@@ -280,6 +329,8 @@ export class VendingService {
           tax:             vendData?.tax,
           receiptNo:       vendData?.receiptNo,
           disco:           vendData?.disco,
+          debtAmount:      vendData?.debtAmount,
+          debtRemaining:   vendData?.debtRemaining,
         },
       };
     }
@@ -292,6 +343,9 @@ export class VendingService {
     const errorMsg     = errorData?.message || axiosError?.message || 'Vending failed';
     const responseCode = errorData?.responseCode;
 
+    this.logger.error(`Vending failed — orderId: ${orderId}`, errorData);
+
+    // Still pending — don't refund
     if ([202, 500, 502, 503].includes(responseCode)) {
       await this.prisma.vendorTransaction.update({
         where: { reference },
@@ -307,14 +361,14 @@ export class VendingService {
       };
     }
 
-    // ✅ Refund FULL amount including service charge on failure
+    // ─── DEFINITE FAILURE — refund everything ────────────────────
     await this.walletService.credit(
       userId,
       totalDecimal,
       `Refund — electricity purchase failed (${orderId}) including service charge`,
     );
 
-    // ✅ Remove the revenue entry since vend failed
+    // Remove revenue entry since vend failed
     await this.prisma.revenueEntry.deleteMany({
       where: { reference: `svc-${reference}` },
     });
@@ -325,7 +379,7 @@ export class VendingService {
     });
 
     throw new BadRequestException(
-      `Vending failed. Full amount of ₦${totalAmount} (including service charge) refunded. Reason: ${errorMsg}`,
+      `Vending failed. ₦${totalAmount.toLocaleString()} (including ₦${SERVICE_CHARGE} service charge) refunded. Reason: ${errorMsg}`,
     );
   }
 }
