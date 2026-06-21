@@ -169,6 +169,7 @@ model User {
   refreshTokens        RefreshToken[]
   savedCards           SavedCard[]
   transactions         Transaction[]
+  revenueEntries RevenueEntry[]
   disco                Disco?                @relation(fields: [discoId], references: [id])
   vendorTransactions   VendorTransaction[]
   wallet               Wallet?
