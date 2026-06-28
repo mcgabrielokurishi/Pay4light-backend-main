@@ -5,8 +5,8 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
-import { VendType, DiscoCode } from './vend-electricity.dto';
 
+import { VendType , DiscoCode} from 'src/vendor/dto/vend-electricity.dto';
 export class VendElectricityLinkDto {
   @ApiProperty({
     description: 'Meter number for electricity purchase',

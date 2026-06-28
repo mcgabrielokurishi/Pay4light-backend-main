@@ -192,7 +192,7 @@ export class VendInvoiceService {
 
     // ✅ Vend electricity
     try {
-      const vendResult = await this.vendingService.vendElectricityDirect({
+      const vendResult = await this.vendingService.vendElectricity({
         userId:   invoice.userId,
         meter:    invoice.meter,
         disco:    invoice.disco as any,
