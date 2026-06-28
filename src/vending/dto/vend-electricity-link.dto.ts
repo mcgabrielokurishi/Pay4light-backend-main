@@ -19,7 +19,7 @@ export class VendElectricityLinkDto {
   @ApiProperty({
     description: 'Distribution company code',
     enum: DiscoCode,
-    example: DiscoCode.ILEDC,
+    example: DiscoCode.IKEJA,
   })
   @IsEnum(DiscoCode)
   disco: DiscoCode;

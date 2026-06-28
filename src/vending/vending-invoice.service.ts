@@ -192,25 +192,30 @@ export class VendInvoiceService {
 
     // ✅ Vend electricity
     try {
-      const vendResult = await this.vendingService.vendElectricity({
-        userId:   invoice.userId,
-        meter:    invoice.meter,
-        disco:    invoice.disco as any,
-        vendType: invoice.vendType as any,
-        amount:   invoice.amount,
-        phone:    invoice.phone,
-        email:    invoice.email,
-        name:     invoice.name || undefined,
-        reference: `vend-${invoice.reference}`,
-      });
+      const vendResult = await this.vendingService.vendElectricity(
+        invoice.userId,
+        {
+          meter:    invoice.meter,
+          disco:    invoice.disco as any,
+          vendType: invoice.vendType as any,
+          amount:   invoice.amount,
+          phone:    invoice.phone,
+          email:    invoice.email,
+          name:     invoice.name || undefined,
+        },
+      );
 
       // ✅ Update invoice as success
+      if (!vendResult.success) {
+        throw new Error(vendResult.message || 'Vending failed');
+      }
+
       await this.prisma.vendInvoice.update({
         where: { id: invoice.id },
         data: {
           status: 'SUCCESS',
-          token:  vendResult.token,
-          units:  vendResult.units?.toString(),
+          token:  vendResult.data?.token,
+          units:  vendResult.data?.units?.toString(),
         },
       });
 
@@ -242,9 +247,9 @@ export class VendInvoiceService {
           getMeterRechargeEmail({
             firstName,
             amount:        invoice.amount,
-            units:         vendResult.units?.toString() || '0',
+            units:         vendResult.data?.units?.toString() || '0',
             meterNumber:   invoice.meter,
-            token:         vendResult.token || '',
+            token:         vendResult.data?.token || '',
             disco:         invoice.disco,
             reference:     invoice.reference,
             date:          now,
@@ -257,18 +262,18 @@ export class VendInvoiceService {
       await Promise.all([
         this.push.notifyElectricityPurchased(
           invoice.userId,
-          vendResult.token || '',
-          vendResult.units?.toString() || '0',
+          vendResult.data?.token || '',
+          vendResult.data?.units?.toString() || '0',
           invoice.amount,
         ),
         this.notification.create({
           userId:  invoice.userId,
           title:   '⚡ Electricity Token Ready!',
-          message: `Payment received! Token: ${vendResult.token} | ${vendResult.units} kWh | Meter: ${invoice.meter}`,
+          message: `Payment received! Token: ${vendResult.data?.token} | ${vendResult.data?.units} kWh | Meter: ${invoice.meter}`,
           type:    'ELECTRICITY',
           metadata: {
-            token:  vendResult.token,
-            units:  vendResult.units,
+            token:  vendResult.data?.token,
+            units:  vendResult.data?.units,
             meter:  invoice.meter,
             reference: invoice.reference,
           },
@@ -276,7 +281,7 @@ export class VendInvoiceService {
       ]);
 
       this.logger.log(
-        `✅ Vend success — ref: ${reference}, token: ${vendResult.token}`,
+        `✅ Vend success — ref: ${reference}, token: ${vendResult.data?.token}`,
       );
       return { received: true, success: true };
 
