@@ -63,7 +63,7 @@ export class VendInvoiceController {
     this.logger.log(JSON.stringify(body, null, 2));
 
     // Verify signature
-    const secret      = process.env.BUYPOWER_MFB_WEBHOOK_SECRET;
+    const secret      = process.env.BUYPOWER_WEBHOOK_SECRET;
     const isProduction = process.env.NODE_ENV === 'production';
 
     if (isProduction && secret && signature) {
