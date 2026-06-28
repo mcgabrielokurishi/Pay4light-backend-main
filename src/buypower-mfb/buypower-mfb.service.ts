@@ -18,8 +18,8 @@ export class BuypowerMfbService {
     private readonly httpService:  HttpService,
     private readonly config:       ConfigService,
   ) {
-    this.baseUrl = this.config.get<string>('BUYPOWER_MFB_BASE_URL') || 'https://api.buypowermfb.net';
-    this.apiKey  = this.config.get<string>('BUYPOWER_MFB_API_KEY')  || '';
+    this.baseUrl = this.config.get<string>('BUYPOWER_BASE_URL') || 'https://api.buypowermfb.net';
+    this.apiKey  = this.config.get<string>('BUYPOWER_API_KEY')  || '';
   }
 
   private get headers() {
