@@ -194,6 +194,7 @@ model User {
   pushNotification     PushNotification[]
   refreshTokens        RefreshToken[]
   savedCards           SavedCard[]
+  vendinvoice          VendInvoice[]
   transactions         Transaction[]
   revenueEntries RevenueEntry[]
   disco                Disco?                @relation(fields: [discoId], references: [id])
