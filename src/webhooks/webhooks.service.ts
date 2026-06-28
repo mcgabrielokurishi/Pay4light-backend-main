@@ -19,7 +19,7 @@ export class WebhookService {
     private readonly notificationService: NotificationService,
   ) {}
 
-  // ✅ Verify BuyPower webhook signature
+  //  Verify BuyPower webhook signature
 
 verifyBuyPowerSignature(signature: string, rawBody: string): boolean {
   const secret = process.env.BUYPOWER_WEBHOOK_SECRET;
@@ -29,7 +29,7 @@ verifyBuyPowerSignature(signature: string, rawBody: string): boolean {
     return false;
   }
 
-  // ✅ Return false instead of throwing
+  //  Return false instead of throwing
   if (!signature) {
     this.logger.warn('No signature provided');
     return false; // ← return false, don't throw
@@ -43,7 +43,7 @@ verifyBuyPowerSignature(signature: string, rawBody: string): boolean {
   return hash === signature;
 }
 
-  // ✅ Route BuyPower events
+  //  Route BuyPower events
   async handleBuyPowerEvent(event: any) {
     this.logger.log(`BuyPower event type: ${event?.event || event?.type}`);
     this.logger.log('Full event:', JSON.stringify(event, null, 2));
@@ -66,7 +66,7 @@ verifyBuyPowerSignature(signature: string, rawBody: string): boolean {
     }
   }
 
-  // ✅ Handle wallet funding — user sent money to virtual account
+  //  Handle wallet funding — user sent money to virtual account
   private async handleWalletFunding(event: any) {
     // BuyPower sends different structures — handle all
     const data      = event?.data || event;
@@ -99,7 +99,7 @@ verifyBuyPowerSignature(signature: string, rawBody: string): boolean {
 
     const userId = wallet.userId;
 
-    // ✅ Credit wallet — idempotent via reference
+    //  Credit wallet — idempotent via reference
     const result = await this.walletService.creditFromWebhook(
       userId,
       Number(amount),
@@ -115,7 +115,7 @@ verifyBuyPowerSignature(signature: string, rawBody: string): boolean {
       return { received: true, duplicated: true };
     }
 
-    // ✅ Send notification to user
+    // Send notification to user
     await this.notificationService.notifyTransaction(
       userId,
       `💰 Your wallet has been credited with ₦${Number(amount).toLocaleString()}`,
@@ -129,7 +129,7 @@ verifyBuyPowerSignature(signature: string, rawBody: string): boolean {
     return { received: true, success: true };
   }
 
-  // ✅ Handle successful vend from webhook
+  // Handle successful vend from webhook
   private async handleVendSuccess(event: any) {
     const data      = event?.data || event;
     const reference = data?.reference || data?.orderId || data?.order_id;

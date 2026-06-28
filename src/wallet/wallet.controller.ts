@@ -32,19 +32,19 @@ export class WalletController {
     private readonly prisma: PrismaService,
   ) {}
 
-  // ─────────────────────────────────────────────────────────────────
+ 
   // GET /wallet
-  // ─────────────────────────────────────────────────────────────────
+  
   @Get()
   async getWallet(@Req() req: any) {
     return this.walletService.getWallet(req.user.id);
   }
 
-  // ─────────────────────────────────────────────────────────────────
+  
   // POST /wallet/provision-virtual-account
   // Creates a permanent BuyPower MFB virtual account for the user.
   // Safe to call multiple times — returns existing if already provisioned.
-  // ─────────────────────────────────────────────────────────────────
+  
 @Post('provision-virtual-account')
 async provisionVirtualAccount(@Req() req: any) {
   const user = await this.prisma.user.findUnique({
@@ -61,7 +61,7 @@ async provisionVirtualAccount(@Req() req: any) {
   if (!user) throw new NotFoundException('User not found');
   if (!user.email) throw new BadRequestException('Email is required');
 
-  // ✅ No longer require user BVN/NIN — hardcoded in service
+  //  No longer require user BVN/NIN — hardcoded in service
   const firstName =
     user.firstName ??
     user.fullName?.split(' ')[0] ??
@@ -93,9 +93,9 @@ async syncWallet(@Req() req: any) {
   };
 }
 
-  // ─────────────────────────────────────────────────────────────────
+  
   // POST /wallet/debit
-  // ─────────────────────────────────────────────────────────────────
+ 
   @Post("debit")
   async debit(
     @Req() req: any,

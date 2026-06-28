@@ -49,7 +49,7 @@ export class VendingService {
     };
   }
 
-  // ─── CHECK METER ──────────────────────────────────────────────────
+  // ─── CHECK METER ─
   async checkMeter(meter: string, disco: string, vendType: string) {
     try {
       const response = await firstValueFrom(
@@ -225,7 +225,7 @@ export class VendingService {
     const data         = response.data;
     const responseCode = data?.responseCode ?? data?.data?.responseCode;
 
-    // ─── PENDING ─────────────────────────────────────────────────
+    // ─── PENDING 
     if ([202, 500, 502, 503].includes(responseCode)) {
       await this.prisma.vendorTransaction.update({
         where: { reference },
@@ -244,7 +244,7 @@ export class VendingService {
       };
     }
 
-    // ─── SUCCESS ─────────────────────────────────────────────────
+    // ─── SUCCESS 
     if (data?.status === true && responseCode === 200) {
       const vendData = data.data;
 
@@ -361,7 +361,7 @@ export class VendingService {
       };
     }
 
-    // ─── DEFINITE FAILURE — refund everything ────────────────────
+    //  DEFINITE FAILURE — refund everything 
     await this.walletService.credit(
       userId,
       totalDecimal,
@@ -384,13 +384,13 @@ export class VendingService {
   }
 }
 
-  // ─── VEND TV ─────────────────────────────────────────────────────
+  //  VEND TV 
   async vendTv(userId: string, dto: VendTvDto) {
     const orderId   = randomUUID();
     const amount    = new Prisma.Decimal(dto.amount.toString());
     const reference = orderId;
 
-    // ✅ Check user wallet balance
+    //  Check user wallet balance
     const userWallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!userWallet) throw new BadRequestException('Wallet not found');
     if (userWallet.locked) throw new BadRequestException('Wallet is locked');
@@ -486,13 +486,13 @@ export class VendingService {
     }
   }
 
-  // ─── VEND DATA ────────────────────────────────────────────────────
+  //  VEND DATA 
   async vendData(userId: string, dto: VendDataDto) {
     const orderId   = randomUUID();
     const amount    = new Prisma.Decimal(dto.amount.toString());
     const reference = orderId;
 
-    // ✅ Check user wallet balance
+    //  Check user wallet balance
     const userWallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!userWallet) throw new BadRequestException('Wallet not found');
     if (userWallet.locked) throw new BadRequestException('Wallet is locked');
@@ -589,7 +589,7 @@ export class VendingService {
     }
   }
 
-  // ─── RE-QUERY ─────────────────────────────────────────────────────
+  //  RE-QUERY 
   async reQuery(orderId: string) {
     try {
       const response = await firstValueFrom(

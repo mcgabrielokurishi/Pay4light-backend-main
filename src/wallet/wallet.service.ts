@@ -74,7 +74,7 @@ export class WalletService {
 
     const fullName = `${user.firstName} ${user.lastName}`;
 
-    // ✅ Call Monnify to create reserved account
+    //  Call Monnify to create reserved account
     const result = await this.monnifyService.createReservedAccount({
       accountReference: user.id,     // userId as unique reference
       accountName:      fullName,
@@ -86,7 +86,7 @@ export class WalletService {
 
     this.logger.log('Monnify reserved account result:', JSON.stringify(result));
 
-    // ✅ Monnify returns array of accounts (one per bank)
+    //  Monnify returns array of accounts (one per bank)
     // accounts: [{ bankName, bankCode, accountNumber }]
     const accounts = result?.accounts || [];
     const primary  = accounts[0];
@@ -118,7 +118,7 @@ export class WalletService {
       bankName:       updatedWallet.virtual_account_bank,
       accountName:    fullName,
       alreadyExisted: false,
-      accounts,      // ✅ return ALL bank options (Wema, Providus etc.)
+      accounts,      //  return ALL bank options (Wema, Providus etc.)
     };
   }
 
@@ -127,7 +127,7 @@ async findByAccountNumber(accountNumber: string): Promise<{ id: string } | null>
     where: {
       OR: [
         { virtualAccountNuban: accountNumber },
-        // ✅ Also check metadata for secondary bank accounts
+        //  Also check metadata for secondary bank accounts
       ],
     },
   });
@@ -203,7 +203,7 @@ async findUserByNubanOrReference(
         },
       });
 
-      // ✅ Push notification after credit
+      //  Push notification after credit
       await this.push.notifyWalletCredited(userId, decimalAmount.toNumber());
       await this.notifManager.notifyWalletCredited(userId, amount, externalRef);
 
@@ -211,7 +211,7 @@ async findUserByNubanOrReference(
         `Wallet credited — userId: ${userId}, amount: NGN${amount}, ref: ${externalRef}`,
       );
 
-      // ✅ Send wallet funded email
+      //  Send wallet funded email
       const userDetails = await tx.user.findUnique({
         where: { id: userId },
         select: { email: true, firstName: true, fullName: true },
@@ -233,7 +233,7 @@ async findUserByNubanOrReference(
         this.mailService
           .sendEmail(
             userDetails.email,
-            '✅ Wallet Funded — Pay4light.ng',
+            ' Wallet Funded — Pay4light.ng',
             getWalletFundedEmail({
               firstName,
               amount: decimalAmount.toNumber(),
@@ -309,7 +309,7 @@ async getAllWalletNubans() {
 }
 
   // DEBIT WITH IDEMPOTENCY
-  // ─── DEBIT WITH IDEMPOTENCY ───────────────────────────────────────
+  
 async debitWithIdempotency(
   userId:      string,
   amount:      Prisma.Decimal,
@@ -346,7 +346,7 @@ async debitWithIdempotency(
         status:      'SUCCESS',
         description,
         metadata:    JSON.stringify({}),
-        // ✅ Remove meterId completely — don't pass empty string
+        //  Remove meterId completely — don't pass empty string
       },
     });
 
@@ -360,7 +360,7 @@ async debitWithIdempotency(
   return result;
 }
 
-// ─── DEBIT ────────────────────────────────────────────────────────
+//  DEBIT
 async debit(
   userId:      string,
   amount:      Prisma.Decimal,
@@ -390,7 +390,7 @@ async debit(
         reference:   randomUUID(),
         description,
         metadata:    JSON.stringify({}),
-        // ✅ No meterId here either
+        //  No meterId here either
       },
     });
 

@@ -34,7 +34,7 @@ export class WebhookController {
     this.logger.log('=== MONNIFY WEBHOOK RECEIVED ===');
     this.logger.log(JSON.stringify(payload, null, 2));
 
-    // ✅ Verify Monnify signature
+    //  Verify Monnify signature
     const webhookSecret = this.configService.get<string>('MONNIFY_WEBHOOK_SECRET');
     const isProduction  = this.configService.get<string>('NODE_ENV') === 'production';
 
@@ -53,7 +53,7 @@ export class WebhookController {
     const eventType = payload?.eventType || '';
     this.logger.log(`Monnify event: "${eventType}"`);
 
-    // ✅ Handle collection events
+    //  Handle collection events
     if (
       eventType === 'SUCCESSFUL_TRANSACTION'          ||
       eventType === 'REVERSED_TRANSACTION'            ||
@@ -72,7 +72,7 @@ export class WebhookController {
     const amount    = Number(data?.amountPaid || data?.amount || 0);
     const reference = data?.transactionReference || data?.paymentReference;
 
-    // ✅ Monnify sends accountNumber for reserved account payments
+    //  Monnify sends accountNumber for reserved account payments
     const accountNumber =
       data?.destinationAccountInformation?.accountNumber ||
       data?.accountNumber ||
@@ -92,7 +92,7 @@ export class WebhookController {
       return { received: true, error: 'Invalid amount' };
     }
 
-    // ✅ Find user by account number
+    //  Find user by account number
     let wallet: { id: string } | null = null;
 
     if (accountNumber) {
@@ -118,7 +118,7 @@ export class WebhookController {
 
     const userId = wallet.id;
 
-    // ✅ Credit wallet
+    //  Credit wallet
     try {
       const result = await this.walletService.creditFromWebhook(
         userId,
@@ -148,7 +148,7 @@ export class WebhookController {
         metadata: { amount, reference },
       });
 
-      this.logger.log(`✅ Wallet credited — userId: ${userId}, amount: ₦${amount}`);
+      this.logger.log(` Wallet credited — userId: ${userId}, amount: ₦${amount}`);
       return { received: true, success: true };
 
     } catch (error) {
@@ -179,16 +179,16 @@ export class WebhookController {
   @HttpCode(200)
   async handleBuypowerWebhook(
     @Req() req: Request,
-    @Headers("x-payable-signature") signature: string, // ✅ correct header
+    @Headers("x-payable-signature") signature: string, //  correct header
     @Body() payload: any,
   ) {
-    // ✅ Log everything
+    //  Log everything
     this.logger.log('=== BUYPOWER WEBHOOK RECEIVED ===');
     this.logger.log(`Event: ${JSON.stringify(payload)}`);
     this.logger.log(`Signature: ${signature}`);
     this.logger.log('=================================');
 
-    // ✅ Only verify signature in production AND when secret is set
+    //  Only verify signature in production AND when secret is set
     const webhookSecret = this.configService.get<string>('BUYPOWER_WEBHOOK_SECRET');
     const isProduction  = this.configService.get<string>('NODE_ENV') === 'production';
 
@@ -206,17 +206,17 @@ export class WebhookController {
       this.logger.log('Signature check skipped — dev mode or no secret');
     }
 
-    // ✅ Extract event type
+    //  Extract event type
     const eventType: string = payload?.event ?? payload?.type ?? '';
     this.logger.log(`Event type: "${eventType}"`);
 
-    // ✅ Check if it's a collection event by eventType (not status)
+    //  Check if it's a collection event by eventType (not status)
     if (!this.isCollectionEvent(eventType)) {
       this.logger.log(`Skipping non-collection event: "${eventType}"`);
       return { received: true };
     }
 
-    // ✅ Extract data — handle all BuyPower payload structures
+    //  Extract data — handle all BuyPower payload structures
     const data = payload?.data ?? payload;
 
     const amount = Number(
@@ -244,20 +244,20 @@ export class WebhookController {
 
     this.logger.log(`Parsed — nuban: ${nuban}, amount: ₦${amount}, ref: ${externalRef}`);
 
-    // ✅ Validate required fields
+    //  Validate required fields
     if (!amount || amount <= 0) {
       this.logger.error(`Invalid amount: ${amount}`);
       return { received: true, error: 'Invalid amount' };
     }
 
-    // ✅ Find user by NUBAN
+    //  Find user by NUBAN
     const user = await this.walletService.findUserByNubanOrReference(
       nuban     || '',
       externalRef || nuban || '',
     );
 
     if (!user) {
-      // ✅ Show all NUBANs in DB for debugging
+      //  Show all NUBANs in DB for debugging
       this.logger.warn(`No user found for nuban: "${nuban}" | ref: "${externalRef}"`);
 
       const allWallets = await this.walletService.getAllWalletNubans();
@@ -268,10 +268,10 @@ export class WebhookController {
 
     this.logger.log(`Found user: ${user.id}`);
 
-    // ✅ Generate a unique reference if none provided
+    //  Generate a unique reference if none provided
     const ref = externalRef || `bp-${nuban}-${Date.now()}`;
 
-    // ✅ Credit wallet
+    //  Credit wallet
     try {
       const result = await this.walletService.creditFromWebhook(
         user.id,
@@ -296,7 +296,7 @@ export class WebhookController {
         return { received: true, duplicate: true };
       }
 
-      // ✅ Send in-app notification
+      //  Send in-app notification
       await this.notification.create({
         userId:  user.id,
         title:   '💰 Wallet Funded',
@@ -305,7 +305,7 @@ export class WebhookController {
         metadata: { amount, nuban, reference: ref },
       });
 
-      this.logger.log(`✅ Wallet credited — userId: ${user.id}, amount: ₦${amount}`);
+      this.logger.log(` Wallet credited — userId: ${user.id}, amount: ₦${amount}`);
       return { received: true, credited: true };
 
     } catch (error: unknown) {
@@ -316,7 +316,7 @@ export class WebhookController {
     }
   }
 
-  // ✅ Fixed — checks eventType not status
+  //  Fixed — checks eventType not status
   private isCollectionEvent(eventType: string): boolean {
     const collectionEvents = [
       'collection.successfully',  // BuyPower uses this spelling
@@ -337,7 +337,7 @@ export class WebhookController {
     );
   }
 
-  // ✅ Returns boolean instead of throwing
+  //  Returns boolean instead of throwing
   private verifySignature(
     rawBody:    string,
     signature:  string,
