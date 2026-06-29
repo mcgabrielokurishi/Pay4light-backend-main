@@ -31,46 +31,61 @@ export class BuypowerMfbService {
 
   // ─── CREATE INVOICE ACCOUNT ──────────────────────────────────────
   // Creates a one-time account number the user pays into
-  async createInvoiceAccount(data: {
-    reference:   string;
-    amount:      number;
-    email:       string;
-    name:        string;
-    description: string;
-    expiresAt?:  string; // ISO date string
-  }) {
-    try {
-      console.log('Creating BuyPower invoice account:', data);
+ async createInvoiceAccount(data: {
+  reference:   string;
+  amount:      number;
+  email:       string;
+  name:        string;
+  description: string;
+  expiresAt?:  string;
+}) {
+  try {
+    // ✅ Log full request for debugging
+    console.log('BuyPower MFB URL:', `${this.baseUrl}/v1/accounts/invoices`);
+    console.log('BuyPower MFB API Key:', this.apiKey ? `${this.apiKey.slice(0, 15)}...` : 'MISSING');
+    console.log('Payload:', JSON.stringify(data, null, 2));
 
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.baseUrl}/v1/accounts/invoices`,
-          {
-            reference:   data.reference,
-            name:        data.name,
-            email:       data.email,
-            description: data.description,
-            amount:      data.amount,
-            expiresAt:   data.expiresAt || this.getExpiry(30), // 30 mins default
-          },
-          { headers: this.headers, timeout: 30000 },
-        ),
-      );
+    const response = await firstValueFrom(
+      this.httpService.post(
+        `${this.baseUrl}/v1/accounts/invoices`,
+        {
+          reference:   data.reference,
+          name:        data.name,
+          email:       data.email,
+          description: data.description,
+          amount:      data.amount,
+          expiresAt:   data.expiresAt || this.getExpiry(30),
+        },
+        {
+          headers: this.headers,
+          timeout: 30000,
+        },
+      ),
+    );
 
-      console.log('BuyPower invoice response:', JSON.stringify(response.data));
-      return response.data;
+    console.log('BuyPower MFB success:', JSON.stringify(response.data));
+    return response.data;
 
-    } catch (error) {
-      const axiosError = error as any;
-      this.logger.error(
-        'Create invoice account failed:',
-        axiosError?.response?.data,
-      );
-      throw new BadRequestException(
-        axiosError?.response?.data?.message || 'Failed to create invoice account',
-      );
-    }
+  } catch (error) {
+    const axiosError = error as any;
+
+    // ✅ Log everything
+    console.error('BuyPower MFB error status:', axiosError?.response?.status);
+    console.error('BuyPower MFB error data:', JSON.stringify(axiosError?.response?.data));
+    console.error('BuyPower MFB error message:', axiosError?.message);
+    console.error('BuyPower MFB request URL:', axiosError?.config?.url);
+    console.error('BuyPower MFB request body:', axiosError?.config?.data);
+
+    this.logger.error(
+      'Create invoice account failed:',
+      axiosError?.response?.data,
+    );
+
+    throw new BadRequestException(
+      axiosError?.response?.data?.message || 'Failed to create invoice account',
+    );
   }
+}
 
   // Returns expiry time as ISO string
   private getExpiry(minutes: number): string {
