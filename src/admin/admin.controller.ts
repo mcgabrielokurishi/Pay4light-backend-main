@@ -1,4 +1,3 @@
-// src/admin/admin.controller.ts
 import {
   Controller, Get, Post, Patch, Delete,
   Body, Param, Query, UseGuards, Req,
@@ -15,11 +14,11 @@ import {
 } from './dto/admin.dto';
 
 @Controller('admin')
-@UseGuards(AuthGuard('jwt'), AdminGuard) // ✅ both guards on all routes
+@UseGuards(AuthGuard('jwt'), AdminGuard) // both guards on all routes
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
-  // ─── DASHBOARD ───────────────────────────────────────────────────
+  //  DASHBOARD 
 
   @Get('dashboard')
   async getDashboard() {
@@ -31,7 +30,7 @@ export class AdminController {
     return this.adminService.getSystemOverview();
   }
 
-  // ─── USERS ───────────────────────────────────────────────────────
+  //  USERS 
 
   @Get('users')
   async getAllUsers(@Query() query: GetUsersDto) {
@@ -80,7 +79,7 @@ export class AdminController {
     return this.adminService.forceDeleteUser(req.user.id, userId);
   }
 
-  // ─── WALLETS ─────────────────────────────────────────────────────
+  //  WALLETS 
 
   @Patch('users/:userId/wallet/lock')
   async lockWallet(
@@ -100,7 +99,7 @@ export class AdminController {
     return this.adminService.adjustWalletBalance(req.user.id, userId, dto);
   }
 
-  // ─── TRANSACTIONS ─────────────────────────────────────────────────
+  //  TRANSACTIONS 
 
   @Get('transactions')
   async getAllTransactions(
@@ -132,7 +131,7 @@ export class AdminController {
     return { success: true, ...result };
   }
 
-  // ─── BROADCAST ───────────────────────────────────────────────────
+  //  BROADCAST 
 
   @Post('broadcast')
   async broadcast(@Req() req: any, @Body() dto: BroadcastDto) {

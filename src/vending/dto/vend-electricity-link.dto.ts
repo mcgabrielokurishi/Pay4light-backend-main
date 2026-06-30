@@ -1,4 +1,3 @@
-// src/vending/dto/vend-electricity-link.dto.ts
 import {
   IsString, IsNumber, IsNotEmpty,
   IsEnum, IsPositive, IsOptional, Min,

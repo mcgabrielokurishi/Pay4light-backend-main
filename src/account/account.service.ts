@@ -16,7 +16,7 @@ export class AccountService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  // ─── DEACTIVATE ACCOUNT ──────────────────────────────────────────
+  // ─── DEACTIVATE ACCOUNT 
   async deactivateAccount(userId: string, dto: DeactivateAccountDto) {
     const user = await this.findUser(userId);
 
@@ -44,7 +44,7 @@ export class AccountService {
     };
   }
 
-  // ─── DELETE ACCOUNT ──────────────────────────────────────────────
+  // ─── DELETE ACCOUNT 
   async deleteAccount(userId: string, dto: DeleteAccountDto) {
     const user = await this.findUser(userId);
 
@@ -67,43 +67,43 @@ export class AccountService {
 
     this.logger.log(`Starting full account deletion for userId: ${userId}`);
 
-    // ✅ Delete everything in correct order (respect FK constraints)
+    //  Delete everything in correct order (respect FK constraints)
     await this.prisma.$transaction(async (tx) => {
 
-      // 1. Revoke all sessions first
+      //  Revoke all sessions first
       await tx.refreshToken.deleteMany({ where: { userId } });
 
-      // 2. Delete device tokens (push notifications)
+      // Delete device tokens (push notifications)
       await tx.deviceToken.deleteMany({ where: { userId } });
 
-      // 3. Delete push notification history
+      //  Delete push notification history
       await tx.pushNotification.deleteMany({ where: { userId } });
 
-      // 4. Delete in-app notifications
+      //  Delete in-app notifications
       await tx.notification.deleteMany({ where: { userId } });
 
-      // 5. Delete OTPs
+      //  Delete OTPs
       await tx.oTP.deleteMany({ where: { userId } });
 
-      // 6. Delete AI conversations
+      //  Delete AI conversations
       await tx.aIConversation.deleteMany({ where: { userId } });
 
-      // 7. Delete saved cards
+      //  Delete saved cards
       await tx.savedCard.deleteMany({ where: { userId } });
 
-      // 8. Delete meter usage stats (before meters)
+      //  Delete meter usage stats (before meters)
       await tx.meterUsageStats.deleteMany({ where: { userId } });
 
-      // 9. Delete meters (removes DISCO relation automatically)
+      // Delete meters (removes DISCO relation automatically)
       await tx.meter.deleteMany({ where: { userId } });
 
-      // 10. Delete vendor transactions
+      //  Delete vendor transactions
       await tx.vendorTransaction.deleteMany({ where: { userId } });
 
-      // 11. Delete wallet transactions
+      // Delete wallet transactions
       await tx.transaction.deleteMany({ where: { userId } });
 
-      // 12. Delete wallet
+      //  Delete wallet
       if (wallet) {
         await tx.wallet.delete({ where: { userId } });
       }
@@ -121,7 +121,7 @@ export class AccountService {
     };
   }
 
-  // ─── REACTIVATE ACCOUNT ──────────────────────────────────────────
+  //  REACTIVATE ACCOUNT 
   async reactivateAccount(userId: string) {
     const user = await this.findUser(userId);
 
@@ -144,7 +144,7 @@ export class AccountService {
     return { message: "Account reactivated successfully" };
   }
 
-  // ─── PRIVATE HELPERS ─────────────────────────────────────────────
+  // PRIVATE HELPERS 
   private async findUser(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },

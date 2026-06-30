@@ -1,4 +1,3 @@
-// src/admin/admin.service.ts
 import {
   Injectable,
   Logger,
@@ -29,8 +28,8 @@ export class AdminService {
     private readonly notification:  NotificationService,
   ) {}
 
-  // ─── DASHBOARD STATS ─────────────────────────────────────────────
-  async getDashboardStats() {
+  // ─── DASHBOARD STATS 
+async getDashboardStats() {
     const now       = new Date();
     const today     = new Date(now.setHours(0, 0, 0, 0));
     const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -103,7 +102,7 @@ export class AdminService {
     };
   }
 
-  // ─── GET ALL USERS ────────────────────────────────────────────────
+  //  GET ALL USERS ──
   async getAllUsers(dto: GetUsersDto) {
     const { search, status, page = 1, limit = 20 } = dto;
 
@@ -178,7 +177,7 @@ export class AdminService {
     };
   }
 
-  // ─── GET ONE USER ─────────────────────────────────────────────────
+  //  GET ONE USER 
   async getUser(userId: string) {
     const user = await this.prisma.user.findUnique({
       where:  { id: userId },
@@ -204,7 +203,7 @@ export class AdminService {
     return user;
   }
 
-  // ─── LOCK / UNLOCK USER ACCOUNT ───────────────────────────────────
+  //  LOCK / UNLOCK USER ACCOUNT 
   async toggleUserLock(adminId: string, userId: string, lock: boolean) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
@@ -230,7 +229,7 @@ export class AdminService {
     // Notify user
     await this.notification.create({
       userId,
-      title:   lock ? '🔒 Account Locked' : '🔓 Account Unlocked',
+      title:   lock ? ' Account Locked' : ' Account Unlocked',
       message: lock
         ? 'Your account has been locked by admin. Contact support.'
         : 'Your account has been unlocked. You can log in again.',
@@ -247,7 +246,7 @@ export class AdminService {
     };
   }
 
-  // ─── TOGGLE USER ACTIVE STATUS ────────────────────────────────────
+  //  TOGGLE USER ACTIVE STATUS 
   async toggleUserActive(adminId: string, userId: string, isActive: boolean) {
     if (userId === adminId) {
       throw new BadRequestException('Cannot deactivate your own account');
@@ -271,7 +270,7 @@ export class AdminService {
     };
   }
 
-  // ─── UPDATE USER ROLE ─────────────────────────────────────────────
+  // UPDATE USER ROLE 
   async updateUserRole(adminId: string, userId: string, role: 'USER' | 'ADMIN') {
     if (userId === adminId) {
       throw new BadRequestException('Cannot change your own role');
@@ -287,7 +286,7 @@ export class AdminService {
     return { success: true, message: `User role updated to ${role}` };
   }
 
-  // ─── LOCK / UNLOCK WALLET ─────────────────────────────────────────
+  //  LOCK / UNLOCK WALLET
   async toggleWalletLock(adminId: string, userId: string, dto: LockWalletDto) {
     const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!wallet) throw new NotFoundException('Wallet not found');
@@ -316,7 +315,7 @@ export class AdminService {
     };
   }
 
-  // ─── ADJUST WALLET BALANCE ────────────────────────────────────────
+  //  ADJUST WALLET BALANCE 
   async adjustWalletBalance(adminId: string, userId: string, dto: AdjustWalletDto) {
     const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!wallet) throw new NotFoundException('Wallet not found');
@@ -332,7 +331,7 @@ export class AdminService {
 
       await this.notification.create({
         userId,
-        title:   '💰 Wallet Credited by Admin',
+        title:   ' Wallet Credited by Admin',
         message: `₦${dto.amount.toLocaleString()} has been added to your wallet. ${dto.reason || ''}`,
         type:    'TRANSACTION',
       });
@@ -352,7 +351,7 @@ export class AdminService {
 
       await this.notification.create({
         userId,
-        title:   '💸 Wallet Debited by Admin',
+        title:   ' Wallet Debited by Admin',
         message: `₦${dto.amount.toLocaleString()} has been deducted from your wallet. ${dto.reason || ''}`,
         type:    'TRANSACTION',
       });
@@ -368,7 +367,7 @@ export class AdminService {
     };
   }
 
-  // ─── GET ALL TRANSACTIONS ─────────────────────────────────────────
+  // GET ALL TRANSACTIONS 
   async getAllTransactions(page = 1, limit = 20, userId?: string) {
     const where = userId ? { userId } : {};
 
@@ -399,7 +398,7 @@ export class AdminService {
     };
   }
 
-  // ─── GET ALL VENDOR TRANSACTIONS ─────────────────────────────────
+  // ─── GET ALL VENDOR TRANSACTIONS 
   async getAllVendorTransactions(
     page   = 1,
     limit  = 20,
@@ -438,7 +437,7 @@ export class AdminService {
     };
   }
 
-  // ─── BROADCAST NOTIFICATION TO ALL USERS ─────────────────────────
+  //  BROADCAST NOTIFICATION TO ALL USERS 
   async broadcastNotification(adminId: string, dto: BroadcastDto) {
     // Get all active users
     const users = await this.prisma.user.findMany({
@@ -470,7 +469,7 @@ export class AdminService {
     };
   }
 
-  // ─── GET SYSTEM OVERVIEW ──────────────────────────────────────────
+  //  GET SYSTEM OVERVIEW 
   async getSystemOverview() {
     const last7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
@@ -516,7 +515,7 @@ export class AdminService {
     };
   }
 
-  // ─── DELETE USER (Admin force delete) ────────────────────────────
+  //  DELETE USER (Admin force delete)
   async forceDeleteUser(adminId: string, userId: string) {
     if (userId === adminId) {
       throw new BadRequestException('Cannot delete your own account');

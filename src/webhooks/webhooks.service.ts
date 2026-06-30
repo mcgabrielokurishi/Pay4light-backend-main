@@ -1,4 +1,3 @@
-// src/webhook/webhook.service.ts
 import {
   Injectable,
   Logger,
@@ -68,7 +67,7 @@ verifyBuyPowerSignature(signature: string, rawBody: string): boolean {
 
   //  Handle wallet funding — user sent money to virtual account
   private async handleWalletFunding(event: any) {
-    // BuyPower sends different structures — handle all
+ 
     const data      = event?.data || event;
     const amount    = data?.amount    || data?.value;
     const nuban     = data?.nuban     || data?.accountNumber || data?.account_number;
@@ -118,7 +117,7 @@ verifyBuyPowerSignature(signature: string, rawBody: string): boolean {
     // Send notification to user
     await this.notificationService.notifyTransaction(
       userId,
-      `💰 Your wallet has been credited with ₦${Number(amount).toLocaleString()}`,
+      ` Your wallet has been credited with ₦${Number(amount).toLocaleString()}`,
       { amount, reference, nuban },
     );
 

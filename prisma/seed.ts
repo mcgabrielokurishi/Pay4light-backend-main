@@ -112,7 +112,7 @@ async function main() {
       supportPhone: disco.supportPhone,
       supportEmail: disco.supportEmail,
       website: disco.website,
-      states: disco.state.join(', '), // Prisma requires `states` as string
+      states: disco.state.join(', '), // as string
     };
 
     await prisma.disco.upsert({

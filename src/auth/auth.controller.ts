@@ -29,7 +29,7 @@ export class AuthController {
   ) {}
 
   
-  // REGISTER
+
   
   @Post("register")
   @HttpCode(HttpStatus.CREATED)
@@ -37,11 +37,10 @@ export class AuthController {
     return this.authService.register(dto);
   }
 
-  // VERIFY OTP AND COMPLETE REGISTRATION
   @Post("register/verify-otp")
   @HttpCode(HttpStatus.OK)
   async verifyOtpAndRegister(@Body() dto: VerifyOtpDto ) {
-    // Verify the OTP
+    
     await this.otpService.verifyOtp({
       identifier: dto.identifier,
       code: dto.code,
@@ -52,7 +51,7 @@ export class AuthController {
     return this.authService.completeRegistration(dto.identifier);
   }
   
-  // LOGIN
+
   
   @Post("login")
   @HttpCode(HttpStatus.OK)
@@ -71,14 +70,14 @@ async forgotPassword(@Body() dto: ForgotPasswordDto) {
   return this.authService.forgotPassword(dto);
 }
 
-// STEP 2
+
 @Post('verify-forgot-password')
 @HttpCode(HttpStatus.OK)
 async verifyForgotPassword(@Body() dto: VerifyForgotPasswordDto) {
   return this.authService.verifyForgotPasswordOtp(dto);
 }
 
-// STEP 3
+
 @Post('reset-password')
 @HttpCode(HttpStatus.OK)
 async resetPassword(@Body() dto: ResetPasswordDto) {

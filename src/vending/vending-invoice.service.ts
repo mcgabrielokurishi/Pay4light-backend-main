@@ -1,4 +1,3 @@
-// src/vending/vend-invoice.service.ts
 import {
   Injectable,
   Logger,
@@ -30,7 +29,7 @@ export class VendInvoiceService {
     private readonly mailService:      MailService,
   ) {}
 
-  // ─── GENERATE INVOICE ACCOUNT ────────────────────────────────────
+  //  GENERATE INVOICE ACCOUNT 
   async generateInvoice(userId: string, dto: VendElectricityLinkDto) {
     const reference   = `PL_${Date.now()}_${Math.floor(Math.random() * 99999999)}`;
     const totalAmount = dto.amount + this.SERVICE_CHARGE;
@@ -51,7 +50,7 @@ export class VendInvoiceService {
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 30); // 30 minute expiry
 
-    // ✅ Call BuyPower MFB to create invoice account
+    //  Call BuyPower MFB to create invoice account
     const invoiceResult = await this.buypowerMfb.createInvoiceAccount({
       reference,
       amount:      totalAmount,
@@ -69,7 +68,7 @@ export class VendInvoiceService {
       throw new BadRequestException('Failed to create invoice account — please try again');
     }
 
-    // ✅ Save invoice order
+    //  Save invoice order
     await this.prisma.vendInvoice.create({
       data: {
         userId,
@@ -90,10 +89,10 @@ export class VendInvoiceService {
       },
     });
 
-    // ✅ Notify user
+    //  Notify user
     await this.notification.create({
       userId,
-      title:   '💡 Invoice Created — Pay to Vend',
+      title:   ' Invoice Created — Pay to Vend',
       message: `Transfer ₦${totalAmount.toLocaleString()} to account ${accountNumber} (${bankName}) ` +
                `to purchase electricity for meter ${dto.meter}. Expires in 30 minutes.`,
       type:    'INFO',
@@ -128,7 +127,7 @@ export class VendInvoiceService {
     };
   }
 
-  // ─── HANDLE BUYPOWER WEBHOOK ─────────────────────────────────────
+  // HANDLE BUYPOWER WEBHOOK 
   async handleBuypowerWebhook(payload: any) {
     this.logger.log('=== BUYPOWER MFB WEBHOOK ===');
     this.logger.log(JSON.stringify(payload, null, 2));
@@ -136,7 +135,7 @@ export class VendInvoiceService {
     const transactionStatus = payload?.transactionStatus || '';
     const accountType       = payload?.bankAccountType   || '';
 
-    // ✅ Only process confirmed invoice payments
+    //  Only process confirmed invoice payments
     if (
       transactionStatus !== 'CONFIRMED' ||
       accountType !== 'Invoice'
@@ -184,13 +183,13 @@ export class VendInvoiceService {
       return { received: true };
     }
 
-    // ✅ Mark as vending to prevent duplicate processing
+    //  Mark as vending to prevent duplicate processing
     await this.prisma.vendInvoice.update({
       where: { id: invoice.id },
       data:  { status: 'VENDING' },
     });
 
-    // ✅ Vend electricity
+    // Vend electricity
     try {
       const vendResult = await this.vendingService.vendElectricity(
         invoice.userId,
@@ -205,7 +204,7 @@ export class VendInvoiceService {
         },
       );
 
-      // ✅ Update invoice as success
+      //  Update invoice as success
       if (!vendResult.success) {
         throw new Error(vendResult.message || 'Vending failed');
       }
@@ -239,11 +238,11 @@ export class VendInvoiceService {
         minute:   '2-digit',
       });
 
-      // ✅ Send email receipt
+      // Send email receipt
       if (user?.email) {
         this.mailService.sendEmail(
           user.email,
-          '⚡ Meter Recharged — Your Token is Ready',
+          ' Meter Recharged — Your Token is Ready',
           getMeterRechargeEmail({
             firstName,
             amount:        invoice.amount,
@@ -258,7 +257,7 @@ export class VendInvoiceService {
         ).catch((err) => this.logger.error(`Email failed: ${err.message}`));
       }
 
-      // ✅ Push + in-app notifications
+      // Push + in-app notifications
       await Promise.all([
         this.push.notifyElectricityPurchased(
           invoice.userId,
@@ -268,7 +267,7 @@ export class VendInvoiceService {
         ),
         this.notification.create({
           userId:  invoice.userId,
-          title:   '⚡ Electricity Token Ready!',
+          title:   ' Electricity Token Ready!',
           message: `Payment received! Token: ${vendResult.data?.token} | ${vendResult.data?.units} kWh | Meter: ${invoice.meter}`,
           type:    'ELECTRICITY',
           metadata: {
@@ -281,7 +280,7 @@ export class VendInvoiceService {
       ]);
 
       this.logger.log(
-        `✅ Vend success — ref: ${reference}, token: ${vendResult.data?.token}`,
+        ` Vend success — ref: ${reference}, token: ${vendResult.data?.token}`,
       );
       return { received: true, success: true };
 
@@ -297,7 +296,7 @@ export class VendInvoiceService {
         data:  { status: 'FAILED' },
       });
 
-      // ✅ Notify user — contact support
+      // Notify user — contact support
       await this.notification.create({
         userId:  invoice.userId,
         title:   '❌ Electricity Vending Failed',
@@ -311,7 +310,7 @@ export class VendInvoiceService {
     }
   }
 
-  // ─── CHECK INVOICE STATUS ────────────────────────────────────────
+  //  CHECK INVOICE STATUS 
   async checkInvoiceStatus(reference: string, userId: string) {
     const invoice = await this.prisma.vendInvoice.findFirst({
       where: { reference, userId },
@@ -340,15 +339,15 @@ export class VendInvoiceService {
       expiresAt:     invoice.expiresAt,
       isExpired,
       message:
-        invoice.status === 'SUCCESS'  ? `⚡ Token ready: ${invoice.token}` :
-        invoice.status === 'VENDING'  ? '⏳ Payment received — vending in progress' :
-        invoice.status === 'FAILED'   ? '❌ Vending failed — contact support' :
-        isExpired                     ? '⏰ Invoice expired — create a new one' :
-                                        '⏳ Awaiting payment',
+        invoice.status === 'SUCCESS'  ? ` Token ready: ${invoice.token}` :
+        invoice.status === 'VENDING'  ? ' Payment received — vending in progress' :
+        invoice.status === 'FAILED'   ? ' Vending failed — contact support' :
+        isExpired                     ? ' Invoice expired — create a new one' :
+                                        ' Awaiting payment',
     };
   }
 
-  // ─── GET USER INVOICES ───────────────────────────────────────────
+  //  GET USER INVOICES 
   async getUserInvoices(userId: string, page = 1, limit = 10) {
     const [invoices, total] = await Promise.all([
       this.prisma.vendInvoice.findMany({

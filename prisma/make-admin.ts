@@ -3,8 +3,8 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  // ✅ Hardcode your email directly
-  const email = 'mcgabrielokurishi@gmail.com'; // ← put your actual email here
+  //  
+  const email = 'mcgabrielokurishi@gmail.com'; 
 
   const user = await prisma.user.findUnique({
     where: { email },
@@ -20,7 +20,7 @@ async function main() {
     data:  { role: 'ADMIN' },
   });
 
-  console.log(`✅ Admin role granted to ${email}`);
+  console.log(` Admin role granted to ${email}`);
 }
 
 main()

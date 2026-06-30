@@ -1,4 +1,3 @@
-// src/buypower-mfb/buypower-mfb.service.ts
 import {
   Injectable,
   Logger,
@@ -29,8 +28,8 @@ export class BuypowerMfbService {
     };
   }
 
-  // ─── CREATE INVOICE ACCOUNT ──────────────────────────────────────
-  // Creates a one-time account number the user pays into
+  //CREATE INVOICE ACCOUNT 
+
  async createInvoiceAccount(data: {
   reference:   string;
   amount:      number;
@@ -40,7 +39,7 @@ export class BuypowerMfbService {
   expiresAt?:  string;
 }) {
   try {
-    // ✅ Log full request for debugging
+    //  
     console.log('BuyPower MFB URL:', `${this.baseUrl}/v1/accounts/invoices`);
     console.log('BuyPower MFB API Key:', this.apiKey ? `${this.apiKey.slice(0, 15)}...` : 'MISSING');
     console.log('Payload:', JSON.stringify(data, null, 2));
@@ -69,7 +68,7 @@ export class BuypowerMfbService {
   } catch (error) {
     const axiosError = error as any;
 
-    // ✅ Log everything
+    //Log everything
     console.error('BuyPower MFB error status:', axiosError?.response?.status);
     console.error('BuyPower MFB error data:', JSON.stringify(axiosError?.response?.data));
     console.error('BuyPower MFB error message:', axiosError?.message);
@@ -87,7 +86,7 @@ export class BuypowerMfbService {
   }
 }
 
-  // Returns expiry time as ISO string
+  // Returns expiry time
   private getExpiry(minutes: number): string {
     const d = new Date();
     d.setMinutes(d.getMinutes() + minutes);

@@ -18,16 +18,6 @@ import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 export class AccountController {
   constructor(private readonly accountService: AccountService) {}
 
-  /**
-   * POST /account/deactivate
-   *
-   * Temporarily deactivates the user's account.
-   * - User cannot log in after this
-   * - All data is preserved
-   * - Account can be reactivated by contacting support
-   *
-   * Body: { password: string, reason?: string }
-   */
   @Post("deactivate")
   @HttpCode(HttpStatus.OK)
   async deactivate(
@@ -37,17 +27,6 @@ export class AccountController {
     return this.accountService.deactivateAccount(req.user.id, dto);
   }
 
-  /**
-   * DELETE /account
-   *
-   * Permanently deletes the user's account (soft delete).
-   * - User cannot log in after this
-   * - PII is anonymised immediately
-   * - Wallet must be empty before deletion is allowed
-   * - Cannot be undone
-   *
-   * Body: { password: string, reason?: string }
-   */
   @Delete()
   @HttpCode(HttpStatus.OK)
   async delete(

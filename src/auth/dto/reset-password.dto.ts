@@ -1,4 +1,3 @@
-// src/auth/dto/reset-password.dto.ts
 import { IsString, IsNotEmpty, MinLength, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -9,7 +8,7 @@ export class ResetPasswordDto {
   })
   @IsString()
   @IsNotEmpty()
-  resetToken: string; // ← returned from verify step
+  resetToken: string; //  returned from verify step
 
    @ApiProperty({
     description : "Password",

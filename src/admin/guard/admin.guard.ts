@@ -1,4 +1,3 @@
-// src/admin/guards/admin.guard.ts
 import {
   Injectable,
   CanActivate,

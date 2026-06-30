@@ -49,7 +49,7 @@ export class VendingService {
     };
   }
 
-  // ─── CHECK METER ─
+  //  CHECK METER 
   async checkMeter(meter: string, disco: string, vendType: string) {
     try {
       const response = await firstValueFrom(
@@ -71,7 +71,7 @@ export class VendingService {
     }
   }
 
-  // ─── CHECK DISCO STATUS ───────────────────────────────────────────
+  // CHECK DISCO STATUS 
   async checkDiscoStatus() {
     try {
       const response = await firstValueFrom(
@@ -86,13 +86,13 @@ export class VendingService {
     }
   }
 
-  // ─── GET BUYPOWER WALLET BALANCE ─────────────────────────────────
-  // Uses the correct URL: https://idev.buypower.ng/v2/wallet/balance
+  // GET BUYPOWER WALLET BALANCE 
+
   async getBuyPowerBalance(): Promise<number> {
     try {
       const response = await firstValueFrom(
         this.httpService.get(
-          `${this.baseUrl}/v2/wallet/balance`, // ✅ correct endpoint
+          `${this.baseUrl}/v2/wallet/balance`, 
           { headers: this.headers },
         ),
       );
@@ -112,7 +112,7 @@ export class VendingService {
     }
   }
 
-  // ─── VEND ELECTRICITY ─────────────────────────────────────────────
+  //  VEND ELECTRICITY
  async vendElectricity(userId: string, dto: VendElectricityDto) {
   const SERVICE_CHARGE = 100;
   const totalAmount    = dto.amount + SERVICE_CHARGE;
@@ -121,7 +121,7 @@ export class VendingService {
   const amount         = new Prisma.Decimal(dto.amount.toString());
   const totalDecimal   = new Prisma.Decimal(totalAmount.toString());
 
-  // ─── WALLET CHECKS ───────────────────────────────────────────────
+  // WALLET CHECKS 
   const userWallet = await this.prisma.wallet.findUnique({
     where: { userId },
   });
@@ -137,7 +137,7 @@ export class VendingService {
     );
   }
 
-  // ─── GET USER INFO ───────────────────────────────────────────────
+  // GET USER INFO 
   const user = await this.prisma.user.findUnique({
     where:  { id: userId },
     select: {
@@ -159,16 +159,16 @@ export class VendingService {
     user?.fullName?.split(' ')[0] ||
     'Customer';
 
-  // ─── NOTIFY USER ABOUT SERVICE CHARGE ───────────────────────────
+  //  NOTIFY USER ABOUT SERVICE CHARGE 
   await this.notificationService.create({
     userId,
-    title:   '💡 Service Charge Notice',
+    title:   ' Service Charge Notice',
     message: `A service charge of ₦${SERVICE_CHARGE} will be deducted alongside your ` +
              `₦${dto.amount.toLocaleString()} electricity purchase. Total: ₦${totalAmount.toLocaleString()}.`,
     type:    'INFO',
   });
 
-  // ─── SAVE PENDING TRANSACTION ────────────────────────────────────
+  //  SAVE PENDING TRANSACTION 
   await this.prisma.vendorTransaction.create({
     data: {
       userId,
@@ -182,7 +182,7 @@ export class VendingService {
     },
   });
 
-  // ─── DEBIT WALLET (electricity + service charge) ─────────────────
+  //  DEBIT WALLET (electricity + service charge) 
   await this.walletService.debitWithIdempotency(
     userId,
     totalDecimal,
@@ -190,7 +190,7 @@ export class VendingService {
     `Electricity ₦${dto.amount.toLocaleString()} + Service charge ₦${SERVICE_CHARGE}`,
   );
 
-  // ─── RECORD SERVICE CHARGE AS REVENUE ───────────────────────────
+  //  RECORD SERVICE CHARGE AS REVENUE 
   await this.prisma.revenueEntry.create({
     data: {
       userId,
@@ -201,7 +201,7 @@ export class VendingService {
     },
   });
 
-  // ─── CALL BUYPOWER ───────────────────────────────────────────────
+  // CALL BUYPOWER 
   try {
     const response = await firstValueFrom(
       this.httpService.post(
@@ -277,7 +277,7 @@ export class VendingService {
       if (user?.email) {
         this.mailService.sendEmail(
           user.email,
-          '⚡ Meter Recharged — Your Token is Ready',
+          ' Meter Recharged — Your Token is Ready',
           getMeterRechargeEmail({
             firstName,
             amount:        dto.amount,
@@ -299,7 +299,7 @@ export class VendingService {
       await Promise.all([
         this.notificationService.create({
           userId,
-          title:   '⚡ Electricity Purchased Successfully',
+          title:   ' Electricity Purchased Successfully',
           message: `Token: ${vendData?.token} | Units: ${vendData?.units} kWh | ` +
                    `₦${dto.amount.toLocaleString()} electricity + ₦${SERVICE_CHARGE} service charge deducted.`,
           type:    'ELECTRICITY',
@@ -627,7 +627,7 @@ export class VendingService {
     }
   }
 
-  // ─── GET PRICE LIST ───────────────────────────────────────────────
+  //  GET PRICE LIST 
   async getPriceList(vertical: string, disco?: string) {
     try {
       const response = await firstValueFrom(
