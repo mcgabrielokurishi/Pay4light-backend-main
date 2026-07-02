@@ -31,101 +31,114 @@ export class VendInvoiceService {
 
   //  GENERATE INVOICE ACCOUNT 
   async generateInvoice(userId: string, dto: VendElectricityLinkDto) {
-    const reference   = `PL_${Date.now()}_${Math.floor(Math.random() * 99999999)}`;
-    const totalAmount = dto.amount + this.SERVICE_CHARGE;
+  const reference   = `PL_${Date.now()}_${Math.floor(Math.random() * 99999999)}`;
+  const totalAmount = dto.amount + this.SERVICE_CHARGE;
 
-    // Get user info
-    const user = await this.prisma.user.findUnique({
-      where:  { id: userId },
-      select: { email: true, fullName: true, firstName: true, lastName: true },
-    });
+  const user = await this.prisma.user.findUnique({
+    where:  { id: userId },
+    select: { email: true, fullName: true, firstName: true, lastName: true },
+  });
 
-    const email = dto.email || user?.email;
-    if (!email) throw new BadRequestException('Email is required');
+  const email = dto.email || user?.email;
+  if (!email) throw new BadRequestException('Email is required');
 
-    const name = dto.name || user?.fullName ||
-      `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() ||
-      'Pay4Light Customer';
+  const name = dto.name || user?.fullName ||
+    `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() ||
+    'Pay4Light Customer';
 
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 30); // 30 minute expiry
+  const expiresAt = new Date();
+  expiresAt.setMinutes(expiresAt.getMinutes() + 30);
 
-    //  Call BuyPower MFB to create invoice account
-    const invoiceResult = await this.buypowerMfb.createInvoiceAccount({
-      reference,
-      amount:      totalAmount,
-      email,
-      name,
-      description: `Pay4Light electricity vend — Meter: ${dto.meter} | DISCO: ${dto.disco} | ₦${dto.amount} + ₦${this.SERVICE_CHARGE} service charge`,
-      expiresAt:   expiresAt.toISOString(),
-    });
+  // Call BuyPower MFB
+  const invoiceResult = await this.buypowerMfb.createInvoiceAccount({
+    reference,
+    amount:      totalAmount,
+    email,
+    name,
+    description: `Pay4Light electricity vend — Meter: ${dto.meter} | DISCO: ${dto.disco} | ₦${dto.amount} + ₦${this.SERVICE_CHARGE} service charge`,
+    expiresAt:   expiresAt.toISOString(),
+  });
 
-    const accountNumber = invoiceResult?.data?.accountNumber || invoiceResult?.accountNumber;
-    const bankName      = invoiceResult?.data?.bankName      || invoiceResult?.bankName || 'BuyPower MFB';
+  console.log('Full invoice result:', JSON.stringify(invoiceResult, null, 2));
 
-    if (!accountNumber) {
-      this.logger.error('No account number in BuyPower response:', invoiceResult);
-      throw new BadRequestException('Failed to create invoice account — please try again');
-    }
+  // ✅ BuyPower returns 'nuban' not 'accountNumber'
+  const accountNumber =
+    invoiceResult?.data?.nuban        ||
+    invoiceResult?.data?.accountNumber ||
+    invoiceResult?.nuban               ||
+    invoiceResult?.accountNumber       ||
+    null;
 
-    //  Save invoice order
-    await this.prisma.vendInvoice.create({
-      data: {
-        userId,
-        reference,
-        meter:         dto.meter,
-        disco:         dto.disco,
-        vendType:      dto.vendType,
-        amount:        dto.amount,
-        serviceCharge: this.SERVICE_CHARGE,
-        totalAmount,
-        phone:         dto.phone,
-        email,
-        name,
-        status:        'PENDING',
-        accountNumber,
-        bankName,
-        expiresAt,
-      },
-    });
+  const bankName =
+    invoiceResult?.data?.bankName ||
+    invoiceResult?.bankName       ||
+    'BuyPower MFB';
 
-    //  Notify user
-    await this.notification.create({
+  if (!accountNumber) {
+    this.logger.error('No account number in BuyPower response:', invoiceResult);
+    throw new BadRequestException(
+      'Failed to create invoice account — please try again',
+    );
+  }
+
+  // Save invoice order
+  await this.prisma.vendInvoice.create({
+    data: {
       userId,
-      title:   ' Invoice Created — Pay to Vend',
-      message: `Transfer ₦${totalAmount.toLocaleString()} to account ${accountNumber} (${bankName}) ` +
-               `to purchase electricity for meter ${dto.meter}. Expires in 30 minutes.`,
-      type:    'INFO',
-    });
-
-    this.logger.log(`Invoice created — ref: ${reference}, account: ${accountNumber}`);
-
-    return {
-      success:       true,
-      message:       'Invoice account created. Transfer the exact amount to complete your purchase.',
       reference,
       meter:         dto.meter,
       disco:         dto.disco,
+      vendType:      dto.vendType,
       amount:        dto.amount,
       serviceCharge: this.SERVICE_CHARGE,
       totalAmount,
-      payment: {
-        accountNumber,
-        bankName,
-        accountName:   name,
-        amount:        totalAmount,
-        narration:     `Pay4Light - ${reference}`,
-      },
-      expiresAt:     expiresAt.toISOString(),
-      expiresIn:     '30 minutes',
-      instructions:  [
-        `Transfer exactly ₦${totalAmount.toLocaleString()} to the account above`,
-        'Use any Nigerian bank app or USSD',
-        'Your electricity token will be sent automatically after payment',
-        'Do not transfer a different amount',
-      ],
-    };
-  }
+      phone:         dto.phone,
+      email,
+      name,
+      status:        'PENDING',
+      accountNumber,
+      bankName,
+      expiresAt,
+    },
+  });
+
+  // Notify user
+  await this.notification.create({
+    userId,
+    title:   '💡 Invoice Created — Pay to Vend',
+    message: `Transfer ₦${totalAmount.toLocaleString()} to account ${accountNumber} (${bankName}) ` +
+             `to purchase electricity for meter ${dto.meter}. Expires in 30 minutes.`,
+    type:    'INFO',
+  });
+
+  this.logger.log(`Invoice created — ref: ${reference}, nuban: ${accountNumber}`);
+
+  return {
+    success:       true,
+    message:       'Invoice account created. Transfer the exact amount to complete your purchase.',
+    reference,
+    meter:         dto.meter,
+    disco:         dto.disco,
+    amount:        dto.amount,
+    serviceCharge: this.SERVICE_CHARGE,
+    totalAmount,
+    payment: {
+      accountNumber,
+      bankName,
+      accountName: name,
+      amount:      totalAmount,
+      narration:   `Pay4Light - ${reference}`,
+    },
+    expiresAt:    expiresAt.toISOString(),
+    expiresIn:    '30 minutes',
+    instructions: [
+      `Transfer exactly ₦${totalAmount.toLocaleString()} to the account above`,
+      'Use any Nigerian bank app or USSD',
+      'Your electricity token will be sent automatically after payment',
+      'Do not transfer a different amount',
+    ],
+  };
+}
 
   // HANDLE BUYPOWER WEBHOOK 
   async handleBuypowerWebhook(payload: any) {

@@ -39,7 +39,7 @@ export class BuypowerMfbService {
   expiresAt?:  string;
 }) {
   try {
-    //  
+    // ✅ Log full request for debugging
     console.log('BuyPower MFB URL:', `${this.baseUrl}/v1/accounts/invoices`);
     console.log('BuyPower MFB API Key:', this.apiKey ? `${this.apiKey.slice(0, 15)}...` : 'MISSING');
     console.log('Payload:', JSON.stringify(data, null, 2));
@@ -68,7 +68,7 @@ export class BuypowerMfbService {
   } catch (error) {
     const axiosError = error as any;
 
-    //Log everything
+    // ✅ Log everything
     console.error('BuyPower MFB error status:', axiosError?.response?.status);
     console.error('BuyPower MFB error data:', JSON.stringify(axiosError?.response?.data));
     console.error('BuyPower MFB error message:', axiosError?.message);
