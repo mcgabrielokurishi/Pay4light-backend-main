@@ -11,6 +11,7 @@ import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { PushNotificationService } from "src/push-notification/push-notification.service";
 import { BuypowerService } from "../buypower/buypower.service";
+import { BuypowerMfbService } from "src/buypower-mfb/buypower-mfb.service";
 import { NotificationManagerService } from "src/notification-settings/notification-manager.service";
 import { MailService } from 'src/common/services/mail.service';
 import { getWalletFundedEmail } from 'src/common/template/email.template';
@@ -22,8 +23,9 @@ export class WalletService {
   constructor(
     private readonly prisma:          PrismaService,
     private readonly buypowerService: BuypowerService,
+    private readonly buypowermfb    : BuypowerMfbService,
     private readonly push:            PushNotificationService,
-    private readonly monnifyService:  MonnifyService,
+    // private readonly monnifyService:  MonnifyService,
     private readonly notifManager:    NotificationManagerService,
     private readonly mailService:     MailService,
   ) {}
@@ -45,12 +47,90 @@ export class WalletService {
   }
 
   // PROVISION VIRTUAL ACCOUNT
+  // async provisionVirtualAccount(user: {
+  //   id:        string;
+  //   firstName: string;
+  //   lastName:  string;
+  //   email:     string;
+  //   bvn?:      string;
+  // }) {
+  //   const wallet = await this.prisma.wallet.findUnique({
+  //     where: { userId: user.id },
+  //   });
+
+  //   if (!wallet) throw new BadRequestException('Wallet not found');
+
+  //   // Already provisioned — return existing
+  //   if (wallet.virtualAccountNuban) {
+  //     return {
+  //       accountNumber:  wallet.virtualAccountNuban,
+  //       bankName:       wallet.virtual_account_bank,
+  //       accountName:    `${user.firstName} ${user.lastName}`,
+  //       alreadyExisted: true,
+  //       // If multiple banks stored in metadata
+  //       accounts:       wallet.virtual_account_meta
+  //         ? JSON.parse(wallet.virtual_account_meta as string)
+  //         : null,
+  //     };
+  //   }
+
+  //   const fullName = `${user.firstName} ${user.lastName}`;
+
+  //   //  Call Monnify to create reserved account
+  //   const result = await this.monnifyService.createReservedAccount({
+  //     accountReference: user.id,     // userId as unique reference
+  //     accountName:      fullName,
+  //     customerEmail:    user.email,
+  //     customerName:     fullName,
+  //     bvn:              user.bvn,
+  //     nin:              '95791401413'
+  //   });
+
+  //   this.logger.log('Monnify reserved account result:', JSON.stringify(result));
+
+  //   //  Monnify returns array of accounts (one per bank)
+  //   // accounts: [{ bankName, bankCode, accountNumber }]
+  //   const accounts = result?.accounts || [];
+  //   const primary  = accounts[0];
+
+  //   if (!primary?.accountNumber) {
+  //     this.logger.error('No account number in Monnify response:', result);
+  //     throw new InternalServerErrorException(
+  //       'Could not provision virtual account — please try again',
+  //     );
+  //   }
+
+  //   // Save primary account + all accounts as metadata
+  //   const updatedWallet = await this.prisma.wallet.update({
+  //     where: { userId: user.id },
+  //     data: {
+  //       virtualAccountNuban:  primary.accountNumber,
+  //       virtual_account_bank: primary.bankName,
+  //       virtual_account_ref:  user.id,
+  //       virtual_account_meta: JSON.stringify(accounts), // all banks
+  //     },
+  //   });
+
+  //   this.logger.log(
+  //     `Virtual account provisioned — user: ${user.id}, account: ${primary.accountNumber}`,
+  //   );
+
+  //   return {
+  //     accountNumber:  updatedWallet.virtualAccountNuban,
+  //     bankName:       updatedWallet.virtual_account_bank,
+  //     accountName:    fullName,
+  //     alreadyExisted: false,
+  //     accounts,      //  return ALL bank options (Wema, Providus etc.)
+  //   };
+  // }
+
   async provisionVirtualAccount(user: {
     id:        string;
     firstName: string;
     lastName:  string;
     email:     string;
     bvn?:      string;
+    nin?:      string;
   }) {
     const wallet = await this.prisma.wallet.findUnique({
       where: { userId: user.id },
@@ -60,57 +140,60 @@ export class WalletService {
 
     // Already provisioned — return existing
     if (wallet.virtualAccountNuban) {
+      this.logger.log(`Virtual account already exists for user ${user.id}`);
       return {
         accountNumber:  wallet.virtualAccountNuban,
         bankName:       wallet.virtual_account_bank,
         accountName:    `${user.firstName} ${user.lastName}`,
         alreadyExisted: true,
-        // If multiple banks stored in metadata
-        accounts:       wallet.virtual_account_meta
-          ? JSON.parse(wallet.virtual_account_meta as string)
-          : null,
       };
     }
 
     const fullName = `${user.firstName} ${user.lastName}`;
 
-    //  Call Monnify to create reserved account
-    const result = await this.monnifyService.createReservedAccount({
-      accountReference: user.id,     // userId as unique reference
-      accountName:      fullName,
-      customerEmail:    user.email,
-      customerName:     fullName,
-      bvn:              user.bvn,
-      nin:              '95791401413'
+    // ✅ Call BuyPower MFB to create reserved account
+    const result = await this.buypowerMfb.createReservedAccount({
+      reference:   user.id,
+      name:        fullName,
+      description: `Pay4Light wallet account for ${user.email}`,
+      nin:         user.nin || '95791401413', // hardcoded default NIN
+      bvn:         user.bvn,
     });
 
-    this.logger.log('Monnify reserved account result:', JSON.stringify(result));
+    this.logger.log('BuyPower MFB reserved account result:', JSON.stringify(result));
 
-    //  Monnify returns array of accounts (one per bank)
-    // accounts: [{ bankName, bankCode, accountNumber }]
-    const accounts = result?.accounts || [];
-    const primary  = accounts[0];
+    // ✅ BuyPower MFB returns nuban
+    const accountNumber =
+      result?.data?.nuban        ||
+      result?.data?.accountNumber ||
+      result?.nuban               ||
+      result?.accountNumber       ||
+      null;
 
-    if (!primary?.accountNumber) {
-      this.logger.error('No account number in Monnify response:', result);
+    const bankName =
+      result?.data?.bankName ||
+      result?.bankName       ||
+      'BuyPower MFB';
+
+    if (!accountNumber) {
+      this.logger.error('No account number in BuyPower MFB response:', result);
       throw new InternalServerErrorException(
         'Could not provision virtual account — please try again',
       );
     }
 
-    // Save primary account + all accounts as metadata
+    // Save to wallet
     const updatedWallet = await this.prisma.wallet.update({
       where: { userId: user.id },
       data: {
-        virtualAccountNuban:  primary.accountNumber,
-        virtual_account_bank: primary.bankName,
+        virtualAccountNuban:  accountNumber,
+        virtual_account_bank: bankName,
         virtual_account_ref:  user.id,
-        virtual_account_meta: JSON.stringify(accounts), // all banks
       },
     });
 
     this.logger.log(
-      `Virtual account provisioned — user: ${user.id}, account: ${primary.accountNumber}`,
+      `Virtual account provisioned — user: ${user.id}, nuban: ${accountNumber}`,
     );
 
     return {
@@ -118,7 +201,6 @@ export class WalletService {
       bankName:       updatedWallet.virtual_account_bank,
       accountName:    fullName,
       alreadyExisted: false,
-      accounts,      //  return ALL bank options (Wema, Providus etc.)
     };
   }
 

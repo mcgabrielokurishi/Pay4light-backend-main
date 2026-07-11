@@ -45,23 +45,59 @@ export class WalletController {
   // Creates a permanent BuyPower MFB virtual account for the user.
   // Safe to call multiple times — returns existing if already provisioned.
   
+// @Post('provision-virtual-account')
+// async provisionVirtualAccount(@Req() req: any) {
+//   const user = await this.prisma.user.findUnique({
+//     where: { id: req.user.id },
+//     select: {
+//       id:        true,
+//       firstName: true,
+//       lastName:  true,
+//       fullName:  true,
+//       email:     true,
+//     },
+//   });
+
+//   if (!user) throw new NotFoundException('User not found');
+//   if (!user.email) throw new BadRequestException('Email is required');
+
+//   //  No longer require user BVN/NIN — hardcoded in service
+//   const firstName =
+//     user.firstName ??
+//     user.fullName?.split(' ')[0] ??
+//     user.email.split('@')[0];
+
+//   const lastName =
+//     user.lastName ??
+//     user.fullName?.split(' ').slice(1).join(' ') ??
+//     'User';
+
+//   return this.walletService.provisionVirtualAccount({
+//     id:        user.id,
+//     firstName,
+//     lastName,
+//     email:     user.email,
+//   });
+// }
+
 @Post('provision-virtual-account')
 async provisionVirtualAccount(@Req() req: any) {
   const user = await this.prisma.user.findUnique({
-    where: { id: req.user.id },
+    where:  { id: req.user.id },
     select: {
       id:        true,
       firstName: true,
       lastName:  true,
       fullName:  true,
       email:     true,
+      bvn:       true,
+      nin:       true,
     },
   });
 
   if (!user) throw new NotFoundException('User not found');
   if (!user.email) throw new BadRequestException('Email is required');
 
-  //  No longer require user BVN/NIN — hardcoded in service
   const firstName =
     user.firstName ??
     user.fullName?.split(' ')[0] ??
@@ -77,6 +113,8 @@ async provisionVirtualAccount(@Req() req: any) {
     firstName,
     lastName,
     email:     user.email,
+    bvn:       user.bvn ?? undefined,
+    nin:       user.nin ?? undefined,
   });
 }
 @Post('sync')
