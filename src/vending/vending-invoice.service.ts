@@ -239,14 +239,13 @@ private async processConfirmedPayment(payload: any) {
     const vendResult = await this.vendingService.vendElectricity(
       invoice.userId,
       {
-        meter:     invoice.meter,
-        disco:     invoice.disco as any,
-        vendType:  invoice.vendType as any,
-        amount:    invoice.amount,
-        phone:     invoice.phone,
-        email:     invoice.email,
-        name:      invoice.name || undefined,
-        reference: `vend-${invoice.reference}`,
+        meter:    invoice.meter,
+        disco:    invoice.disco as any,
+        vendType: invoice.vendType as any,
+        amount:   invoice.amount,
+        phone:    invoice.phone,
+        email:    invoice.email,
+        name:     invoice.name || undefined,
       },
     );
 
