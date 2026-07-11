@@ -152,7 +152,7 @@ export class WalletService {
     const fullName = `${user.firstName} ${user.lastName}`;
 
     // ✅ Call BuyPower MFB to create reserved account
-    const result = await this.buypowerMfb.createReservedAccount({
+    const result = await this.buypowermfb.createReservedAccount({
       reference:   user.id,
       name:        fullName,
       description: `Pay4Light wallet account for ${user.email}`,
