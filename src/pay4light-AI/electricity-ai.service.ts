@@ -28,7 +28,7 @@ constructor(private readonly prisma: PrismaService) {
 
   // ✅ Use gemini-2.0-flash — free tier, latest, faster
   this.model = this.genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash-lite',
+    model: 'gemini-2.5-pro', // Use 'gemini-2.5-pro' for the latest model
     systemInstruction: SYSTEM_PROMPT,
     generationConfig: {
       maxOutputTokens: 1024,
