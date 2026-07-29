@@ -1,4 +1,3 @@
-// src/ai/ai.service.ts
 import {
   Injectable,
   Logger,
@@ -26,9 +25,8 @@ constructor(private readonly prisma: PrismaService) {
 
   this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-  // ✅ Use gemini-2.0-flash — free tier, latest, faster
   this.model = this.genAI.getGenerativeModel({
-    model: 'gemini-2.5-pro', // Use 'gemini-2.5-pro' for the latest model
+    model: 'gemini-2.0-flash-lite', 
     systemInstruction: SYSTEM_PROMPT,
     generationConfig: {
       maxOutputTokens: 1024,
@@ -47,7 +45,7 @@ constructor(private readonly prisma: PrismaService) {
     ],
   });
 }
-  // ─── MAIN CHAT METHOD ─────────────────────────────────────────────
+  //  MAIN CHAT METHOD 
   async chat(userId: string, dto: ChatDto) {
     const { message, conversationId } = dto;
 
@@ -121,7 +119,7 @@ constructor(private readonly prisma: PrismaService) {
 }
   }
 
-  // ─── GET CONVERSATION HISTORY ─────────────────────────────────────
+  // ─── GET CONVERSATION HISTORY 
   async getConversation(userId: string, conversationId: string) {
     const conversation = await this.prisma.aIConversation.findFirst({
       where: { id: conversationId, userId },
@@ -144,7 +142,7 @@ constructor(private readonly prisma: PrismaService) {
     };
   }
 
-  // ─── GET ALL CONVERSATIONS ────────────────────────────────────────
+  // ─── GET ALL CONVERSATIONS ───
   async getAllConversations(userId: string) {
     const conversations = await this.prisma.aIConversation.findMany({
       where:   { userId },
@@ -173,7 +171,7 @@ constructor(private readonly prisma: PrismaService) {
     });
   }
 
-  // ─── DELETE CONVERSATION ──────────────────────────────────────────
+  //  DELETE CONVERSATION 
   async deleteConversation(userId: string, conversationId: string) {
     await this.prisma.aIConversation.deleteMany({
       where: { id: conversationId, userId },
@@ -181,7 +179,7 @@ constructor(private readonly prisma: PrismaService) {
     return { success: true, message: 'Conversation deleted' };
   }
 
-  // ─── CLEAR ALL CONVERSATIONS ──────────────────────────────────────
+  //  CLEAR ALL CONVERSATIONS 
   async clearAllConversations(userId: string) {
     await this.prisma.aIConversation.deleteMany({
       where: { userId },
@@ -189,7 +187,6 @@ constructor(private readonly prisma: PrismaService) {
     return { success: true, message: 'All conversations cleared' };
   }
 
-  // ─── QUICK ANSWER (no history) ────────────────────────────────────
   // For simple one-off questions — saves tokens
   async quickAnswer(question: string) {
     try {

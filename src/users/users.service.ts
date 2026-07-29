@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "database/prisma.service";
 import { UpdateUserDto } from "./dto/update-user.dto";
+
 
 @Injectable()
 export class UsersService {
@@ -31,26 +32,30 @@ export class UsersService {
 
 
 async updateProfile(userId: string, dto: UpdateUserDto) {
+  //  Guard against undefined userId
+  if (!userId) {
+    throw new BadRequestException('User ID is missing. Please log in again.');
+  }
+
   const updatedUser = await this.prisma.user.update({
-    where: { id: userId },
+    where: { id: userId }, //  userId must not be undefined
     data: {
-   
-      ...(dto.fullName  ? { fullName: dto.fullName }   : {}),
+      ...(dto.fullName  ? { fullName:  dto.fullName }  : {}),
       ...(dto.firstName ? { firstName: dto.firstName } : {}),
-      ...(dto.lastName  ? { lastName: dto.lastName }   : {}),
-      ...(dto.email     ? { email: dto.email }         : {}),
-      ...(dto.phone     ? { phone: dto.phone }         : {}),
+      ...(dto.lastName  ? { lastName:  dto.lastName }  : {}),
+      ...(dto.email     ? { email:     dto.email }     : {}),
+      ...(dto.phone     ? { phone:     dto.phone }     : {}),
     },
     select: {
-      id: true,
-      fullName: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-      phone: true,
-      role: true,
+      id:         true,
+      fullName:   true,
+      firstName:  true,
+      lastName:   true,
+      email:      true,
+      phone:      true,
+      role:       true,
       isVerified: true,
-      createdAt: true,
+      createdAt:  true,
     },
   });
 

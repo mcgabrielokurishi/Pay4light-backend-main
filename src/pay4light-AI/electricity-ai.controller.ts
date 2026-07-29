@@ -1,4 +1,3 @@
-// src/ai/ai.controller.ts
 import {
   Controller,
   Post,
@@ -18,14 +17,14 @@ import { ChatDto,QuickAnswerDto } from './dto/ai.dto';
 export class AiController {
   constructor(private readonly aiService: AiService) {}
 
-  // ─── CHAT (with history) — protected ─────────────────────────────
+  //  CHAT (with history) — protected 
   @Post('chat')
   @UseGuards(AuthGuard('jwt'))
   async chat(@Req() req: any, @Body() dto: ChatDto) {
     return this.aiService.chat(req.user.id, dto);
   }
 
-  // ─── QUICK ANSWER — public (no auth, no history) ─────────────────
+  // ─── QUICK ANSWER — public (no auth, no history) 
   // Good for FAQ page, landing page chatbot
   @Post('ask')
   async quickAnswer(@Body() dto: QuickAnswerDto) {
@@ -46,7 +45,7 @@ async listModels() {
   }));
 }
 
-  // ─── GET ALL CONVERSATIONS ────────────────────────────────────────
+  //  GET ALL CONVERSATIONS 
   @Get('conversations')
   @UseGuards(AuthGuard('jwt'))
   async getAllConversations(@Req() req: any) {
@@ -58,7 +57,7 @@ async listModels() {
     };
   }
 
-  // ─── GET ONE CONVERSATION ─────────────────────────────────────────
+  // GET ONE CONVERSATION 
   @Get('conversations/:id')
   @UseGuards(AuthGuard('jwt'))
   async getConversation(
@@ -69,7 +68,7 @@ async listModels() {
     return { success: true, data };
   }
 
-  // ─── DELETE ONE CONVERSATION ──────────────────────────────────────
+  //  DELETE ONE CONVERSATION 
   @Delete('conversations/:id')
   @UseGuards(AuthGuard('jwt'))
   async deleteConversation(
@@ -79,7 +78,7 @@ async listModels() {
     return this.aiService.deleteConversation(req.user.id, id);
   }
 
-  // ─── CLEAR ALL CONVERSATIONS ──────────────────────────────────────
+  // CLEAR ALL CONVERSATIONS 
   @Delete('conversations')
   @UseGuards(AuthGuard('jwt'))
   async clearAll(@Req() req: any) {
