@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException } from "@nestjs/common";
+import {
+  Injectable,
+  BadRequestException,
+  InternalServerErrorException,
+  Logger,
+} from "@nestjs/common";
 import { PrismaService } from "database/prisma.service";
 import { MailService } from "src/common/services/mail.service";
 import { generateOTP, hashOTP, generateExpiry } from "./otp.util";
@@ -7,6 +12,8 @@ import { VerifyOtpDto } from "./dto/verify-otp.dto";
 
 @Injectable()
 export class OtpService {
+  private readonly logger = new Logger(OtpService.name);
+
   constructor(
     private prisma: PrismaService,
     private mailService: MailService,
@@ -57,8 +64,10 @@ export class OtpService {
           purpose === "REGISTER" ? "registration" : purpose.toLowerCase(),
         );
       } catch (error) {
-        // If email fails, log the code in console as fallback
-        console.log(`OTP for ${identifier}: ${code}`);
+        this.logger.error(`Failed to send OTP email to ${identifier}`, error as any);
+        throw new InternalServerErrorException(
+          'Failed to send OTP email. Please try again later.',
+        );
       }
     } else {
       // TODO: Integrate SMS provider for phone OTP
