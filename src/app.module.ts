@@ -21,6 +21,7 @@ import { BankModule } from "./bank/bank.module";
 import { PushNotificationModule } from "./push-notification/push-notification.module";
 import { InformationModule } from "./information/information.module";
 import { ForecastModule } from "./forcast/forcast.module";
+import { DeviceAuthModule } from "./device-auth/device-auth.module";
 import { ScheduleModule } from "@nestjs/schedule";
 import { RequeryModule } from "./requery/requery.module";
 import { MonnifyModule } from "./monnify/monnify.module";
@@ -35,6 +36,7 @@ import { NotificationSettingsModule } from "./notification-settings/notification
     TransactionsModule,
     UsersModule,
     NotificationModule,
+    DeviceAuthModule,
     MonnifyModule,
     AdminModule,
     BankAccountModule,
