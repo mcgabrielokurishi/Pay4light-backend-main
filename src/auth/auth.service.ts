@@ -56,8 +56,7 @@ export class AuthService {
      private notifManager:  NotificationManagerService
   ) {}
 
-  // ─── REGISTER ───────────────────────────────────────────────────
-
+  // ─── REGISTER 
   async register(dto: RegisterDto) {
     if (!dto) throw new BadRequestException("Request body is missing");
 
@@ -151,7 +150,7 @@ export class AuthService {
 
   this.pendingRegistrations.delete(identifier);
 
-  // ✅ Provision virtual account in background — don't block registration
+  //  Provision virtual account in background — don't block registration
   this.provisionAccountAfterRegistration(newUser).catch((err) => {
     this.logger.warn(
       `Virtual account provisioning failed for user ${newUser.id}: ${err.message}`,
@@ -406,7 +405,7 @@ async changePassword(userId: string, dto: ChangePasswordDto) {
     };
   }
 
-  // ─── REFRESH ────────────────────────────────────────────────────
+  // ─── REFRESH 
 
   async refresh(dto: RefreshDto) {
     const { refreshToken } = dto;

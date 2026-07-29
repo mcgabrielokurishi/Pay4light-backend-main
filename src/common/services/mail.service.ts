@@ -1,11 +1,5 @@
-import {
-  Injectable,
-  Logger,
-  InternalServerErrorException,
-} from "@nestjs/common";
+import { Injectable, Logger, InternalServerErrorException } from "@nestjs/common";
 import { Resend } from "resend";
-import * as fs from "fs";
-import * as path from "path";
 
 @Injectable()
 export class MailService {
@@ -17,7 +11,6 @@ export class MailService {
     if (!process.env.RESEND_API_KEY) {
       throw new Error("RESEND_API_KEY is not defined in environment variables");
     }
-
     if (!process.env.MAIL_FROM) {
       throw new Error("MAIL_FROM is not defined in environment variables");
     }
@@ -32,109 +25,92 @@ export class MailService {
     purpose: string = "verification"
   ): Promise<void> {
     try {
-      const logoPath = path.join(
-        process.cwd(),
-        "src",
-        "assets",
-        "pay4light.jpg"
-      );
-
-      const logoBuffer = fs.readFileSync(logoPath);
-
       const { data, error } = await this.resend.emails.send({
         from: this.fromAddress,
         to: email,
         subject: `Your ${purpose} OTP Code`,
         html: `
-<body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;">
+<body style="margin: 0; padding: 0; background-color: #f4f6f8; font-family: Arial, Helvetica, sans-serif;">
 
-<div style="padding:20px;">
-<div style="max-width:500px;margin:auto;background:#ffffff;padding:30px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.05);">
+  <div style="padding: 20px;">
+    <div class="container" style="max-width: 500px; margin: auto; background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
 
-<div style="text-align:center;margin-bottom:25px;">
-<img
-src="cid:pay4light-logo"
-alt="Pay4Light"
-width="180"
-style="display:block;margin:auto;"
+      <!-- Logo -->
+      <div style="text-align: center; margin-bottom: 20px;">
+        <img
+  src="https://pay4light.ng/images/pay4light-logo.png"
+  alt="Pay4Light Logo"
+  width="170"
+  style="display:block;margin:auto;"
 />
-</div>
+      </div>
 
-<h2 style="margin:0 0 20px;color:#333;text-align:center;">
-Verify your Pay4Light account
-</h2>
+      <!-- Title -->
+      <h2 class="text" style="margin-top: 0; color: #333333; text-align: center;">
+        Verify your Pay4Light account
+      </h2>
 
-<p style="color:#555;font-size:14px;">
-Hello,
-</p>
+      <!-- Body -->
+      <p class="text" style="color: #555555; font-size: 14px;">
+        Hello,
+      </p>
 
-<p style="color:#555;font-size:14px;">
-Welcome to <strong>Pay4Light</strong>.
-</p>
+      <p class="text" style="color: #555555; font-size: 14px;">
+        Welcome to <strong>Pay4Light</strong>.
+      </p>
 
-<p style="color:#555;font-size:14px;">
-Your One-Time Password (OTP) is:
-</p>
+      <p class="text" style="color: #555555; font-size: 14px;">
+        Your One-Time Password (OTP) is:
+      </p>
 
-<div style="text-align:center;margin:25px 0;">
-<span style="
-display:inline-block;
-font-size:30px;
-font-weight:bold;
-letter-spacing:8px;
-color:#ff6b00;">
-${code}
-</span>
-</div>
+      <!-- OTP -->
+      <div style="text-align: center; margin: 20px 0;">
+        <span class="otp" style="display: inline-block; font-size: 28px; letter-spacing: 6px; font-weight: bold; color: #007bff;">
+          ${code}
+        </span>
+      </div>
 
-<p style="text-align:center;color:#555;font-size:14px;">
-This code is valid for <strong>10 minutes</strong>.
-</p>
+      <p class="text" style="color: #555555; font-size: 14px; text-align: center;">
+        This code is valid for <strong>10 minutes</strong>.
+      </p>
 
-<p style="margin-top:20px;color:#d9534f;font-size:13px;">
-Do not share this code with anyone. Pay4Light will never ask for your OTP.
-</p>
+      <!-- Warning -->
+      <p class="warning" style="color: #d9534f; font-size: 13px; margin-top: 20px;">
+        Do not share this code with anyone. Pay4Light will never ask for your OTP.
+      </p>
 
-<p style="color:#555;font-size:14px;">
-Pay4Light helps you manage prepaid electricity meters, purchase electricity tokens, and monitor your energy usage easily.
-</p>
+      <!-- Info -->
+      <p class="text" style="color: #555555; font-size: 14px;">
+        Pay4Light helps you manage prepaid electricity meters, buy tokens, and monitor your energy usage easily.
+      </p>
 
-<p style="color:#555;font-size:14px;">
-Once verified, you can register your meter and begin purchasing electricity instantly.
-</p>
+      <p class="text" style="color: #555555; font-size: 14px;">
+        After verification, you can add your meter and start buying electricity tokens.
+      </p>
 
-<p style="color:#555;font-size:14px;">
-If you didn't request this code, simply ignore this email.
-</p>
+      <!-- Footer -->
+      <p class="text" style="color: #555555; font-size: 14px;">
+        If you did not request this, please ignore this email.
+      </p>
 
-<p style="color:#555;font-size:14px;">
-Need help?
-<a href="mailto:support@pay4light.ng"
-style="color:#ff6b00;text-decoration:none;">
-support@pay4light.ng
-</a>
-</p>
+      <p class="text" style="color: #555555; font-size: 14px;">
+        Need help? 
+        <a href="mailto:support@pay4light.ng" style="color: #007bff; text-decoration: none;">
+          support@pay4light.ng
+        </a>
+      </p>
 
-<hr style="border:none;border-top:1px solid #eee;margin:25px 0;" />
+      <hr class="divider" style="border: none; border-top: 1px solid #eeeeee; margin: 20px 0;" />
 
-<p style="text-align:center;font-size:13px;color:#999;">
-<strong>Pay4Light Team</strong><br/>
-Smart Energy for Smart Living
-</p>
+      <p class="muted" style="text-align: center; font-size: 13px; color: #999999;">
+        <strong>Pay4Light Team</strong><br/>
+        Smart Energy for Smart Living
+      </p>
 
-</div>
-</div>
+    </div>
+  </div>
 
-</body>
-`,
-        attachments: [
-          {
-            filename: "pay4light.jpg",
-            content: logoBuffer,
-            contentType: "image/jpeg",
-            contentId: "pay4light-logo",
-          },
-        ],
+        `,
       });
 
       if (error) {
@@ -199,10 +175,7 @@ Smart Energy for Smart Living
       });
 
       if (error) {
-        this.logger.error(
-          `Resend error sending attachment to ${to}:`,
-          error
-        );
+        this.logger.error(`Resend error sending attachment to ${to}:`, error);
         throw new InternalServerErrorException(error.message);
       }
 
