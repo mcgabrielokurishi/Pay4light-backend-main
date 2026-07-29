@@ -224,10 +224,8 @@ export class DeviceAuthService {
     };
   }
 
-  // ─── BIOMETRIC — REGISTER PUBLIC KEY  async setupBiometric(userId: string, dto: {
-    deviceId:    string;
-    publicKey:   string; // RSA public key from device
-  }) {
+  // ─── BIOMETRIC — REGISTER PUBLIC KEY
+  async setupBiometric(userId: string, dto: { deviceId: string; publicKey: string }) {
     const device = await this.prisma.device.findFirst({
       where: { deviceId: dto.deviceId, userId },
     });
