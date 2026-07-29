@@ -57,12 +57,14 @@ export class OtpService {
 
     // Send OTP via email if email is provided
     if (email) {
+      this.logger.log(`Sending OTP email to ${email} for purpose ${purpose}`);
       try {
         await this.mailService.sendOtp(
           email,
           code,
           purpose === "REGISTER" ? "registration" : purpose.toLowerCase(),
         );
+        this.logger.log(`OTP email sent to ${email}`);
       } catch (error) {
         this.logger.error(`Failed to send OTP email to ${identifier}`, error as any);
         throw new InternalServerErrorException(

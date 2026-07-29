@@ -233,20 +233,26 @@ export class AuthService {
   async forgotPassword(dto: ForgotPasswordDto) {
     const { email } = dto;
 
+    this.logger.log(`Forgot password requested for ${email}`);
+
     const user = await this.prisma.user.findFirst({ where: { email } });
 
     // Always return same message — prevents email enumeration attacks
     if (!user) {
+      this.logger.warn(`Forgot password requested for unknown email ${email}`);
       return {
         message: 'If an account with that email exists, an OTP has been sent.',
       };
     }
 
     if (!user.isVerified) {
+      this.logger.warn(`Forgot password blocked: user ${email} is not verified`);
       throw new BadRequestException(
         'Account not verified. Please verify your account first.',
       );
     }
+
+    this.logger.log(`Sending password reset OTP to verified user ${email}`);
 
     await this.otpService.sendOtp({
       email,
