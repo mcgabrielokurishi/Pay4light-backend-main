@@ -382,7 +382,82 @@ export class VendingService {
       `Vending failed. ₦${totalAmount.toLocaleString()} (including ₦${SERVICE_CHARGE} service charge) refunded. Reason: ${errorMsg}`,
     );
   }
-}
+
+  //  VEND ELECTRICITY DIRECTLY FOR INVOICE PAYMENTS
+  async vendElectricityDirect(dto: {
+    userId:    string;
+    meter:     string;
+    disco:     any;
+    vendType:  any;
+    amount:    number;
+    phone:     string;
+    email?:    string;
+    name?:     string;
+    reference: string;
+  }) {
+    const orderId = dto.reference;
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(
+          `${this.baseUrl}/v2/vend`,
+          {
+            orderId:     dto.reference,
+            meter:       dto.meter,
+            disco:       dto.disco,
+            vendType:    dto.vendType,
+            paymentType: 'B2B',
+            vertical:    'ELECTRICITY',
+            amount:      dto.amount.toString(),
+            phone:       dto.phone,
+            email:       dto.email || '',
+            name:        dto.name  || 'Pay4Light Customer',
+          },
+          { headers: this.headers, timeout: 60000 },
+        ),
+      );
+
+      const data         = response.data;
+      const responseCode = data?.responseCode ?? data?.data?.responseCode;
+
+      if (data?.status === true && responseCode === 200) {
+        return {
+          token: data.data?.token || null,
+          units: data.data?.units || null,
+          pending: false,
+        };
+      }
+
+      if ([202, 500, 502, 503].includes(responseCode)) {
+        return {
+          token:   null,
+          units:   null,
+          pending: true,
+        };
+      }
+
+      throw new Error(data?.message || 'Vending failed');
+
+    } catch (error) {
+      const axiosError = error as any;
+      const errorData  = axiosError?.response?.data;
+      const responseCode = errorData?.responseCode;
+      const errorMsg = errorData?.message || axiosError?.message || 'Vending failed';
+
+      if ([202, 500, 502, 503].includes(responseCode)) {
+        return {
+          token:   null,
+          units:   null,
+          pending: true,
+        };
+      }
+
+      this.logger.error(`Invoice direct vend failed — orderId: ${orderId}`, errorData || errorMsg);
+      throw new BadRequestException(
+        axiosError?.response?.data?.message || error.message || 'Vending failed',
+      );
+    }
+  }
 
   //  VEND TV 
   async vendTv(userId: string, dto: VendTvDto) {

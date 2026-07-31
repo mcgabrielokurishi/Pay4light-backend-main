@@ -61,7 +61,7 @@ export class VendInvoiceService {
 
   console.log('Full invoice result:', JSON.stringify(invoiceResult, null, 2));
 
-  // ✅ BuyPower returns 'nuban' not 'accountNumber'
+  //  BuyPower returns 'nuban' not 'accountNumber'
   const accountNumber =
     invoiceResult?.data?.nuban        ||
     invoiceResult?.data?.accountNumber ||
@@ -236,28 +236,31 @@ private async processConfirmedPayment(payload: any) {
       `Vending electricity — meter: ${invoice.meter}, disco: ${invoice.disco}, amount: ₦${invoice.amount}`,
     );
 
-    const vendResult = await this.vendingService.vendElectricity(
-      invoice.userId,
-      {
-        meter:    invoice.meter,
-        disco:    invoice.disco as any,
-        vendType: invoice.vendType as any,
-        amount:   invoice.amount,
-        phone:    invoice.phone,
-        email:    invoice.email,
-        name:     invoice.name || undefined,
-      },
-    );
+    const vendResult = await this.vendingService.vendElectricityDirect({
+      userId:    invoice.userId,
+      meter:     invoice.meter,
+      disco:     invoice.disco as any,
+      vendType:  invoice.vendType as any,
+      amount:    invoice.amount,
+      phone:     invoice.phone,
+      email:     invoice.email,
+      name:      invoice.name || undefined,
+      reference: `vend-${invoice.reference}`,
+    });
 
     this.logger.log(`Vend result: ${JSON.stringify(vendResult)}`);
 
-    //  Update invoice as success
+    if (vendResult.pending) {
+      this.logger.log(`Vend pending — ref: ${reference}, invoice remains in progress`);
+      return { received: true, pending: true };
+    }
+
     await this.prisma.vendInvoice.update({
       where: { id: invoice.id },
       data: {
         status: 'SUCCESS',
-        token:  vendResult.data?.token,
-        units:  vendResult.data?.units?.toString(),
+        token:  vendResult.token,
+        units:  vendResult.units?.toString(),
       },
     });
 
@@ -289,9 +292,9 @@ private async processConfirmedPayment(payload: any) {
         getMeterRechargeEmail({
           firstName,
           amount:        invoice.amount,
-          units:         vendResult.data?.units?.toString() || '0',
+          units:         vendResult.units?.toString() || '0',
           meterNumber:   invoice.meter,
-          token:         vendResult.data?.token || '',
+          token:         vendResult.token || '',
           disco:         invoice.disco,
           reference:     invoice.reference,
           date:          now,
@@ -304,18 +307,18 @@ private async processConfirmedPayment(payload: any) {
     await Promise.all([
       this.push.notifyElectricityPurchased(
         invoice.userId,
-        vendResult.data?.token || '',
-        vendResult.data?.units?.toString() || '0',
+        vendResult.token || '',
+        vendResult.units?.toString() || '0',
         invoice.amount,
       ),
       this.notification.create({
         userId:  invoice.userId,
         title:   ' Electricity Token Ready!',
-        message: `Payment received! Token: ${vendResult.data?.token} | ${vendResult.data?.units} kWh | Meter: ${invoice.meter}`,
+        message: `Payment received! Token: ${vendResult.token} | ${vendResult.units} kWh | Meter: ${invoice.meter}`,
         type:    'ELECTRICITY',
         metadata: {
-          token:     vendResult.data?.token,
-          units:     vendResult.data?.units,
+          token:     vendResult.token,
+          units:     vendResult.units,
           meter:     invoice.meter,
           reference: invoice.reference,
         },
@@ -323,8 +326,7 @@ private async processConfirmedPayment(payload: any) {
     ]);
 
     this.logger.log(
-      ` Vend success — ref: ${reference}, token: ${vendResult.data?.token}`,
-
+      ` Vend success — ref: ${reference}, token: ${vendResult.token}`,
     );
     return { received: true, success: true };
 
