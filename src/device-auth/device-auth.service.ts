@@ -16,6 +16,7 @@ import {
   BiometricChallengeDto,
   BiometricLoginDto,
   CheckDeviceDto,
+  ChangeDevicePasswordDto,
 } from './dto/device-auth.dto';
 
 // Store challenges temporarily in memory (expires in 2 minutes)
@@ -232,7 +233,6 @@ export class DeviceAuthService {
   await this.prisma.notification.create({
     data: {
       userId,
-      title:   '🔐 Password Changed',
       message: 'Your Pay4Light password was changed successfully. If this was not you, contact support immediately.',
       type:    'WARNING',
     },
