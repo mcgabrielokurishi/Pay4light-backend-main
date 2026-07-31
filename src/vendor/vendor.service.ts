@@ -382,6 +382,7 @@ export class VendingService {
       `Vending failed. ₦${totalAmount.toLocaleString()} (including ₦${SERVICE_CHARGE} service charge) refunded. Reason: ${errorMsg}`,
     );
   }
+}
 
   //  VEND ELECTRICITY DIRECTLY FOR INVOICE PAYMENTS
   async vendElectricityDirect(dto: {
