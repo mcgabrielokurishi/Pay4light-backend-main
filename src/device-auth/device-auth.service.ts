@@ -193,6 +193,59 @@ export class DeviceAuthService {
     return this.generateTokens(user.id, user.email ?? user.phone!);
   }
 
+  async changePassword(userId: string, dto: ChangeDevicePasswordDto) {
+  const user = await this.prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user) throw new NotFoundException('User not found');
+
+  // Verify current password
+  const isValid = await bcrypt.compare(dto.currentPassword, user.password);
+  if (!isValid) {
+    throw new UnauthorizedException('Current password is incorrect');
+  }
+
+  // Prevent same password
+  const isSame = await bcrypt.compare(dto.newPassword, user.password);
+  if (isSame) {
+    throw new BadRequestException(
+      'New password cannot be the same as your current password',
+    );
+  }
+
+  const hashedPassword = await bcrypt.hash(dto.newPassword, 12);
+
+  // Update password + revoke all sessions except current device
+  await this.prisma.$transaction([
+    this.prisma.user.update({
+      where: { id: userId },
+      data:  { password: hashedPassword },
+    }),
+    this.prisma.refreshToken.updateMany({
+      where: { userId, revoked: false },
+      data:  { revoked: true },
+    }),
+  ]);
+
+  // Notify user
+  await this.prisma.notification.create({
+    data: {
+      userId,
+      title:   '🔐 Password Changed',
+      message: 'Your Pay4Light password was changed successfully. If this was not you, contact support immediately.',
+      type:    'WARNING',
+    },
+  });
+
+  this.logger.log(`Password changed — userId: ${userId}`);
+
+  return {
+    success: true,
+    message: 'Password changed successfully. Please log in again on other devices.',
+  };
+}
+
   // ─── BIOMETRIC — GET CHALLENGE ───────────────────────────────────
   // Frontend calls this to get a challenge to sign with biometric
   async getBiometricChallenge(dto: BiometricChallengeDto) {

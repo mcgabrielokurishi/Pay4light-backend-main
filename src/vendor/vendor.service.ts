@@ -396,8 +396,6 @@ export class VendingService {
     name?:     string;
     reference: string;
   }) {
-    const orderId = dto.reference;
-
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -421,19 +419,22 @@ export class VendingService {
       const data         = response.data;
       const responseCode = data?.responseCode ?? data?.data?.responseCode;
 
+      this.logger.log(`Vend response: ${JSON.stringify(data)}`);
+
       if (data?.status === true && responseCode === 200) {
         return {
-          token: data.data?.token || null,
-          units: data.data?.units || null,
-          pending: false,
+          success: true,
+          token:   data.data?.token,
+          units:   data.data?.units,
         };
       }
 
       if ([202, 500, 502, 503].includes(responseCode)) {
         return {
+          success: false,
+          pending: true,
           token:   null,
           units:   null,
-          pending: true,
         };
       }
 
@@ -441,21 +442,11 @@ export class VendingService {
 
     } catch (error) {
       const axiosError = error as any;
-      const errorData  = axiosError?.response?.data;
-      const responseCode = errorData?.responseCode;
-      const errorMsg = errorData?.message || axiosError?.message || 'Vending failed';
-
-      if ([202, 500, 502, 503].includes(responseCode)) {
-        return {
-          token:   null,
-          units:   null,
-          pending: true,
-        };
-      }
-
-      this.logger.error(`Invoice direct vend failed — orderId: ${orderId}`, errorData || errorMsg);
+      this.logger.error('vendElectricityDirect failed:', axiosError?.response?.data || error.message);
       throw new BadRequestException(
-        axiosError?.response?.data?.message || error.message || 'Vending failed',
+        axiosError?.response?.data?.message ||
+        error.message ||
+        'Vending failed',
       );
     }
   }

@@ -8,6 +8,7 @@ import {
   RegisterDeviceDto,
   SetupPinDto,
   VerifyPinDto,
+  ChangeDevicePasswordDto,
   BiometricChallengeDto,
   BiometricLoginDto,
   CheckDeviceDto,
@@ -64,6 +65,15 @@ export class DeviceAuthController {
   async loginWithBiometric(@Body() dto: BiometricLoginDto) {
     return this.deviceAuthService.loginWithBiometric(dto);
   }
+
+  @Post('change-password')
+@UseGuards(AuthGuard('jwt'))
+async changePassword(
+  @Req() req: any,
+  @Body() dto: ChangeDevicePasswordDto,
+) {
+  return this.deviceAuthService.changePassword(req.user.id, dto);
+}
 
   //  Get all trusted devices
   @Get('devices')

@@ -4,9 +4,11 @@ import {
   IsOptional,
   IsEnum,
   Length,
+  Matches,
+  MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-
+ 
 export enum Platform {
   ANDROID = 'ANDROID',
   IOS = 'IOS',
@@ -115,4 +117,18 @@ export class CheckDeviceDto {
   @IsString()
   @IsNotEmpty()
   deviceId: string;
+}
+
+
+export class ChangeDevicePasswordDto {
+  @IsString()
+  @IsNotEmpty()
+  currentPassword: string;
+
+  @IsString()
+  @MinLength(8)
+  @Matches(/^(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/, {
+    message: 'Password must contain uppercase, number and symbol',
+  })
+  newPassword: string;
 }
