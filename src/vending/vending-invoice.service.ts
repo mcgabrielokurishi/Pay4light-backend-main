@@ -234,6 +234,17 @@ private async vendWithRequery(invoice: any) {
   const MAX_ATTEMPTS = 5;
   const DELAYS       = [20000, 40000, 60000, 60000, 60000]; // in ms — matches BuyPower's [20,40,60]
 
+  const vendReference = `vend-${invoice.reference}-${randomUUID()}`;
+  const normalizePhone = (phone?: string): string => {
+    if (!phone) return '';
+    const trimmed = phone.trim();
+    if (trimmed.startsWith('+')) return trimmed;
+    if (trimmed.startsWith('0') && trimmed.length > 1) return `+234${trimmed.slice(1)}`;
+    if (/^[0-9]{10}$/.test(trimmed)) return `+234${trimmed}`;
+    if (/^234[0-9]{10}$/.test(trimmed)) return `+${trimmed}`;
+    return trimmed;
+  };
+
   let token: string | null = null;
   let units: string | null = null;
 
@@ -241,7 +252,6 @@ private async vendWithRequery(invoice: any) {
     this.logger.log(`Vend attempt ${attempt}/${MAX_ATTEMPTS} — invoice: ${invoice.id}`);
 
     try {
-      const vendReference = `vend-${invoice.reference}`;
 
       // First attempt — call vend directly
       if (attempt === 1) {
@@ -251,7 +261,7 @@ private async vendWithRequery(invoice: any) {
           disco:     invoice.disco as any,
           vendType:  invoice.vendType as any,
           amount:    invoice.amount,
-          phone:     invoice.phone,
+          phone:     normalizePhone(invoice.phone),
           email:     invoice.email,
           name:      invoice.name || undefined,
           reference: vendReference,
@@ -444,9 +454,12 @@ private sleep(ms: number): Promise<void> {
   }
 async reQuery(orderId: string) {
   try {
+    const url = `${this.baseUrl}/v2/vend?orderId=${orderId}&getLastResponse=true`;
+    this.logger.log(`ReQuery GET ${url}`);
+
     const response = await firstValueFrom(
       this.httpService.get(
-        `${this.baseUrl}/v2/vend?orderId=${orderId}&getLastResponse=true`,
+        url,
         { headers: this.headers },
       ),
     );

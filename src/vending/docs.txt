@@ -1,0 +1,266 @@
+https://idev.buypower.ng/v2/transaction/:order_id
+Re-query a previous transaction using the orderId provided during the /vend call.
+
+AUTHORIZATION
+Bearer Token
+This request is using Bearer Token from collectionBP API (B2B)
+PATH VARIABLES
+order_id
+042AC54DF98EF7CB26CBEB365D9F0D33
+
+Example Request
+Successful
+View More
+javascript
+var requestOptions = {
+  method: 'GET',
+  redirect: 'follow'
+};
+
+fetch("https://idev.buypower.ng/v2/transaction/135EE81DAAA59E11648532v", requestOptions)
+  .then(response => response.text())
+  .then(result => console.log(result))
+  .catch(error => console.log('error', error));
+200 OK
+Example Response
+Body
+Headers (13)
+View More
+json
+{
+  "result": {
+    "status": true,
+    "data": {
+      "id": 7347238,
+      "amountGenerated": "9302.33",
+      "disco": "ABUJA",
+      "debtAmount": "0.00",
+      "debtRemaining": "0.00",
+      "orderId": "135EE81DAAA59E11648532v",
+      "receiptNo": "7002202010232575554",
+      "tax": "697.67",
+      "vendTime": "2021-06-02 14:47:03",
+      "token": "2755-2924-2525-9465-7190",
+      "totalAmountPaid": 500,
+      "units": "382.8",
+      "vendAmount": "500",
+      "vendRef": "7X5J4",
+      "responseCode": 100,
+      "responseMessage": "Payment successful."
+    }
+  }
+}
+GET
+Get Account Balance
+https://idev.buypower.ng/v2/wallet/balance
+Gets the current status of your wallet.
+
+AUTHORIZATION
+Bearer Token
+This request is using Bearer Token from collectionBP API (B2B)
+
+var requestOptions = {
+  method: 'GET',
+  redirect: 'follow'
+};
+
+fetch("https://idev.buypower.ng/v2/transaction/135EE81DAAA59E11648532v", requestOptions)
+  .then(response => response.text())
+  .then(result => console.log(result))
+  .catch(error => console.log('error', error));
+
+  var requestOptions = {
+  method: 'GET',
+  redirect: 'follow'
+};
+
+fetch("https://idev.buypower.ng/v2/transaction/135EE81DAAA59E11648532v", requestOptions)
+  .then(response => response.text())
+  .then(result => console.log(result))
+  .catch(error => console.log('error', error));
+
+  {
+  "status": true,
+  "responseCode": 200,
+  "data": {
+    "id": 7351225,
+    "amountGenerated": 437.21,
+    "tariff": null,
+    "debtAmount": 0,
+    "debtRemaining": 0,
+    "disco": "ABUJA",
+    "freeUnits": 0,
+    "orderId": "1dd37e1d-c5df-4a2a-8041-1a1d131cbe18",
+    "receiptNo": "1613546757563",
+    "tax": 62.79,
+    "vendTime": null,
+    "token": "0000-0000-0000-0000-0000",
+    "totalAmountPaid": 1000,
+    "units": "12.5",
+    "vendAmount": 0,
+    "vendRef": "1613546757563",
+    "responseCode": 100,
+    "responseMessage": "Vending Successful",
+    "demandCategory": "NMD",
+    "assetProvider": "BH"
+  }
+}
+
+var raw = "{\n    \"orderId\": \"2ee7fff8-c638-4176-95d2-e5036712f20a\",\n    \"meter\": \"88888888880\",\n    \"disco\": \"ABUJA\",\n    \"phone\": \"08000000000\",\n    \"paymentType\": \"B2B\",\n    \"vendType\": \"PREPAID\",\n    \"vertical\": \"ELECTRICITY\",\n    \"amount\": \"6802\",\n    \"email\": \"Cristopher.Haley25@gmail.com\",\n    \"name\": \"Duane Rohan DDS\"\n}";
+
+var requestOptions = {
+  method: 'POST',
+  body: raw,
+  redirect: 'follow'
+};
+
+fetch("https://idev.buypower.ng/v2/vend", requestOptions)
+  .then(response => response.text())
+  .then(result => console.log(result))
+  .catch(error => console.log('error', error));
+
+  {
+  "status": true,
+  "responseCode": 200,
+  "data": {
+    "id": 7351225,
+    "amountGenerated": 437.21,
+    "tariff": null,
+    "debtAmount": 0,
+    "debtRemaining": 0,
+    "disco": "ABUJA",
+    "freeUnits": 0,
+    "orderId": "1dd37e1d-c5df-4a2a-8041-1a1d131cbe18",
+    "receiptNo": "1613546757563",
+    "tax": 62.79,
+    "vendTime": null,
+    "token": "0000-0000-0000-0000-0000",
+    "totalAmountPaid": 1000,
+    "units": "12.5",
+    "vendAmount": 0,
+    "vendRef": "1613546757563",
+    "responseCode": 100,
+    "responseMessage": "Vending Successful",
+    "demandCategory": "NMD",
+    "assetProvider": "BH"
+  }
+}
+
+
+POST
+Initiate a vend request
+https://idev.buypower.ng/v2/requests
+Get response to quote.
+
+Request Data
+
+View More
+Field	Type	Description	Required
+orderId	String	Unique Order ID to identify transaction.	Yes
+meter	String	Meter to generate utility token for.	Yes
+disco	String	Distribution Company meter belongs to. Valid types: “ABUJA”, “KADUNA”, “JOS”. Required phone: Customer phone number.	Yes
+paymentType	String	Transaction payment type. e.g. “USSD”, “ONLINE”.	Yes
+vendType	String	Meter type: Valid types: “PREPAID”, “POSTPAID”.	Yes
+amount	Number	Amount (in Naira) paid by customer. e.g. 2000	Yes
+email	String	Valid Customer email.	No
+name	String	Customer name.	No
+phone	String	Customer's phone number.	Yes
+vertical	String	The category of service you are consuming. This defaults to ELECTRICITY for now.	No
+rtt	Boolean	Default is "true", which means you wait to get a response after you initiate a request, when it's "false", you get a 202 Accepted response, and get the final response via a webhook notification	No
+AUTHORIZATION
+Bearer Token
+This request is using Bearer Token from collectionBP API (B2B)
+Body
+raw (json)
+json
+{
+    "order_id": 
+}
+Example Request
+Successful
+View More
+javascript
+var raw = "{\n    \"orderId\": \"2ee7fff8-c638-4176-95d2-e5036712f20a\",\n    \"meter\": \"88888888880\",\n    \"disco\": \"ABUJA\",\n    \"phone\": \"08000000000\",\n    \"paymentType\": \"B2B\",\n    \"vendType\": \"PREPAID\",\n    \"vertical\": \"ELECTRICITY\",\n    \"amount\": \"6802\",\n    \"email\": \"Cristopher.Haley25@gmail.com\",\n    \"name\": \"Duane Rohan DDS\"\n}";
+
+var requestOptions = {
+  method: 'POST',
+  body: raw,
+  redirect: 'follow'
+};
+
+fetch("https://idev.buypower.ng/v2/vend", requestOptions)
+  .then(response => response.text())
+  .then(result => console.log(result))
+  .catch(error => console.log('error', error));
+200 OK
+Example Response
+Body
+Headers (13)
+View More
+json
+{
+  "status": true,
+  "responseCode": 200,
+  "data": {
+    "id": 7351225,
+    "amountGenerated": 437.21,
+    "tariff": null,
+    "debtAmount": 0,
+    "debtRemaining": 0,
+    "disco": "ABUJA",
+    "freeUnits": 0,
+    "orderId": "1dd37e1d-c5df-4a2a-8041-1a1d131cbe18",
+    "receiptNo": "1613546757563",
+    "tax": 62.79,
+    "vendTime": null,
+    "token": "0000-0000-0000-0000-0000",
+    "totalAmountPaid": 1000,
+    "units": "12.5",
+    "vendAmount": 0,
+    "vendRef": "1613546757563",
+    "responseCode": 100,
+    "responseMessage": "Vending Successful",
+    "demandCategory": "NMD",
+    "assetProvider": "BH"
+  }
+}
+POST
+Create an order
+https://idev.buypower.ng/v2/orders?strict=1
+Make a Vend Request to a respective DisCo.
+
+Request Data
+
+View More
+Field	Type	Description	Required
+orderId	String	Unique Order ID to identify transaction.	Yes
+meter	String	Meter to generate utility token for.	Yes
+disco	String	Distribution Company meter belongs to. Valid types: “ABUJA”, “KADUNA”, “JOS”. Required phone: Customer phone number.	Yes
+paymentType	String	Transaction payment type. e.g. “USSD”, “ONLINE”.	Yes
+vendType	String	Meter type: Valid types: “PREPAID”, “POSTPAID”.	Yes
+amount	Number	Amount (in Naira) paid by customer. e.g. 2000	Yes
+email	String	Valid Customer email.	No
+name	String	Customer name.	No
+phone	String	Customer's phone number.	Yes
+vertical	String	The category of service you are consuming. This defaults to ELECTRICITY for now.	No
+rtt	Boolean	Default is "true", which means you wait to get a response after you initiate a request, when it's "false", you get a 202 Accepted response, and get the final response via a webhook notification	No
+AUTHORIZATION
+Bearer Token
+This request is using Bearer Token from collectionBP API (B2B)
+PARAMS
+strict
+1
+
+Body
+raw (json)
+json
+{
+    "orderId": "c6c9c646-ce7f-47ea-a005-8f7cd08a9ea1",
+    "vendType": "PREPAID",
+    "amount": "1200",
+    "phone": "08186077527",
+    "meter": "12345678910",
+    "disco": "ABUJA",
+    "vertical": "ELECTRICITY",
+    "paymentType": "B2B"
+}

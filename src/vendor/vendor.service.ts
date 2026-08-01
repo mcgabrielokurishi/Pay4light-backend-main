@@ -658,40 +658,69 @@ export class VendingService {
 
   //  RE-QUERY 
   async reQuery(orderId: string) {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.get(
-          `${this.baseUrl}/v2/vend?orderId=${orderId}&getLastResponse=true`,
-          { headers: this.headers },
-        ),
-      );
+    const endpoints = [
+      `/v2/transaction/${orderId}`,
+      `/v2/vend?orderId=${orderId}&getLastResponse=true`,
+      `/v2/vend/requery?orderId=${orderId}`,
+      `/v2/vend/status?orderId=${orderId}`,
+      `/v2/requery?orderId=${orderId}`,
+    ];
 
-      const data     = response.data?.result ?? response.data;
-      const vendData = data?.data;
+    let lastError: any = null;
 
-      if (vendData?.responseCode === 100 || data?.status === true) {
-        await this.prisma.vendorTransaction.updateMany({
-          where: { reference: orderId },
-          data: {
-            status:          'SUCCESS',
-            token:           vendData?.token,
-            units:           vendData?.units?.toString(),
-            responsePayload: data,
-          },
-        });
+    for (const path of endpoints) {
+      try {
+        const url = `${this.baseUrl}${path}`;
+        this.logger.log(`ReQuery GET ${url}`);
+
+        const response = await firstValueFrom(
+          this.httpService.get(
+            url,
+            { headers: this.headers },
+          ),
+        );
+
+        const data     = response.data?.result ?? response.data;
+        const vendData = data?.data ?? data;
+
+        this.logger.log(`ReQuery response for ${orderId} via ${path}: ${JSON.stringify(data)}`);
+
+        if (vendData?.responseCode === 100 || vendData?.responseCode === 200 || data?.status === true) {
+          await this.prisma.vendorTransaction.updateMany({
+            where: { reference: orderId },
+            data: {
+              status:          'SUCCESS',
+              token:           vendData?.token,
+              units:           vendData?.units?.toString(),
+              responsePayload: data,
+            },
+          });
+        }
+
+        return {
+          success: data?.status ?? false,
+          pending: [202, 500, 502, 503].includes(vendData?.responseCode),
+          data:    vendData,
+        };
+
+      } catch (error) {
+        const axiosError = error as any;
+        lastError = axiosError;
+
+        const status = axiosError?.response?.status;
+        const message = axiosError?.response?.data?.message || axiosError?.message;
+
+        this.logger.warn(`ReQuery path ${path} failed: ${status} ${message}`);
+
+        if (status && status !== 404 && status !== 400) {
+          throw new BadRequestException(message || 'Re-query failed');
+        }
       }
-
-      return {
-        success: data?.status ?? false,
-        data:    vendData,
-      };
-
-    } catch (error) {
-      const axiosError = error as any;
-      throw new BadRequestException(
-        axiosError?.response?.data?.message || 'Re-query failed',
-      );
     }
+
+    throw new BadRequestException(
+      lastError?.response?.data?.message || 'Re-query failed',
+    );
   }
 
   //  GET PRICE LIST 
