@@ -13,21 +13,37 @@ import { PushNotificationService } from 'src/push-notification/push-notification
 import { MailService } from 'src/common/services/mail.service';
 import { getMeterRechargeEmail } from 'src/common/template/email.template';
 import { VendElectricityLinkDto } from './dto/vend-electricity-link.dto';
+import { HttpService } from '@nestjs/axios';
 
 @Injectable()
 export class VendInvoiceService {
   private readonly logger         = new Logger(VendInvoiceService.name);
   private readonly SERVICE_CHARGE = 100;
+  private readonly baseUrl: string;
+  private readonly apiKey:  string;
 
   constructor(
     private readonly prisma:           PrismaService,
-    private readonly config:           ConfigService,
+    private readonly configService:      ConfigService,
     private readonly buypowerMfb:      BuypowerMfbService,
     private readonly vendingService:   VendingService,
+    private readonly httpService:          HttpService,
     private readonly notification:     NotificationService,
     private readonly push:             PushNotificationService,
     private readonly mailService:      MailService,
-  ) {}
+  )
+   {
+    this.baseUrl = this.configService.get<string>('BUYPOWER_BASE_URL_FOR_METER_VEND') || 'https://api.buypower.ng';
+    this.apiKey  = this.configService.get<string>('BUYPOWER_API_KEY_FOR_METER_VEND')  || '';
+ }
+
+  private get headers() {
+    return {
+      Authorization: `Bearer ${this.apiKey}`,
+      'Content-Type': 'application/json',
+  }
+  }
+
 
   //  GENERATE INVOICE ACCOUNT 
   async generateInvoice(userId: string, dto: VendElectricityLinkDto) {
@@ -165,31 +181,16 @@ export class VendInvoiceService {
 }
 
 private async processConfirmedPayment(payload: any) {
-  const data = payload?.data || {};
-
-  //  BuyPower uses these field names
-  const reference     = data?.accountExchangeReference || // ← your PL_ reference
-                        data?.reference                ||
-                        data?.transactionReference     ||
-                        null;
-
-  const accountNumber = data?.accountNumber            || // ← NUBAN
-                        data?.destinationAccountNumber ||
-                        null;
-
+  const data          = payload?.data || {};
+  const reference     = data?.accountExchangeReference || data?.reference;
+  const accountNumber = data?.accountNumber;
   const amount        = Number(data?.amount || 0);
 
   this.logger.log(
     `Processing — ref: ${reference}, account: ${accountNumber}, amount: ₦${amount}`,
   );
 
-  if (!reference && !accountNumber) {
-    this.logger.error('No reference or account number in webhook');
-    return { received: true, error: 'Missing identifier' };
-  }
-
-  // Find invoice by reference OR account number
-  let invoice = await this.prisma.vendInvoice.findFirst({
+  const invoice = await this.prisma.vendInvoice.findFirst({
     where: {
       OR: [
         ...(reference     ? [{ reference }]     : []),
@@ -199,79 +200,123 @@ private async processConfirmedPayment(payload: any) {
   });
 
   if (!invoice) {
-    this.logger.warn(
-      `Invoice not found — ref: ${reference}, account: ${accountNumber}`,
-    );
-    // Log all invoices for debug
-    const all = await this.prisma.vendInvoice.findMany({
-      select: { reference: true, accountNumber: true, status: true },
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-    });
-    this.logger.warn('Recent invoices in DB:', JSON.stringify(all));
+    this.logger.warn(`Invoice not found — ref: ${reference}`);
     return { received: true, error: 'Invoice not found' };
   }
 
-  this.logger.log(`Found invoice: ${invoice.id}, status: ${invoice.status}`);
-
   if (invoice.status === 'SUCCESS') {
-    this.logger.warn(`Duplicate webhook — ref: ${reference}`);
+    this.logger.warn(`Duplicate webhook — already successful`);
     return { received: true, duplicated: true };
   }
 
   if (invoice.status === 'VENDING') {
-    this.logger.warn(`Already vending — ref: ${reference}`);
+    this.logger.warn(`Already vending`);
     return { received: true };
   }
 
-  //  Mark as vending
+  this.logger.log(`Found invoice: ${invoice.id}, status: ${invoice.status}`);
+
+  // Mark as vending
   await this.prisma.vendInvoice.update({
     where: { id: invoice.id },
     data:  { status: 'VENDING' },
   });
 
-  //  Vend electricity
-  try {
-    this.logger.log(
-      `Vending electricity — meter: ${invoice.meter}, disco: ${invoice.disco}, amount: ₦${invoice.amount}`,
-    );
+  //  Try to vend with automatic requery
+  await this.vendWithRequery(invoice);
 
-    const vendResult = await this.vendingService.vendElectricityDirect({
-      userId:    invoice.userId,
-      meter:     invoice.meter,
-      disco:     invoice.disco as any,
-      vendType:  invoice.vendType as any,
-      amount:    invoice.amount,
-      phone:     invoice.phone,
-      email:     invoice.email,
-      name:      invoice.name || undefined,
-      reference: `vend-${invoice.reference}`,
-    });
+  return { received: true, processing: true };
+}
 
-    this.logger.log(`Vend result: ${JSON.stringify(vendResult)}`);
+// ─── VEND WITH AUTOMATIC REQUERY 
+private async vendWithRequery(invoice: any) {
+  const MAX_ATTEMPTS = 5;
+  const DELAYS       = [20000, 40000, 60000, 60000, 60000]; // in ms — matches BuyPower's [20,40,60]
 
-    if (vendResult.pending) {
-      this.logger.log(`Vend pending — ref: ${reference}, invoice remains in progress`);
-      return { received: true, pending: true };
+  let token: string | null = null;
+  let units: string | null = null;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    this.logger.log(`Vend attempt ${attempt}/${MAX_ATTEMPTS} — invoice: ${invoice.id}`);
+
+    try {
+      const vendReference = `vend-${invoice.reference}`;
+
+      // First attempt — call vend directly
+      if (attempt === 1) {
+        const result = await this.vendingService.vendElectricityDirect({
+          userId:    invoice.userId,
+          meter:     invoice.meter,
+          disco:     invoice.disco as any,
+          vendType:  invoice.vendType as any,
+          amount:    invoice.amount,
+          phone:     invoice.phone,
+          email:     invoice.email,
+          name:      invoice.name || undefined,
+          reference: vendReference,
+        });
+
+        this.logger.log(`Attempt ${attempt} result: ${JSON.stringify(result)}`);
+
+        if (result.success && result.token) {
+          token = result.token;
+          units = result.units?.toString() || null;
+          break; //  Got token — exit loop
+        }
+
+        if (result.pending) {
+          this.logger.log(`Attempt ${attempt} pending — waiting ${DELAYS[attempt - 1] / 1000}s`);
+          await this.sleep(DELAYS[attempt - 1]);
+          continue; // try requery next iteration
+        }
+
+      } else {
+        // Subsequent attempts — requery using orderId
+        this.logger.log(`Requerying orderId: ${vendReference}`);
+
+        const requeryResult = await this.vendingService.reQuery(vendReference);
+
+        this.logger.log(`Requery result: ${JSON.stringify(requeryResult)}`);
+
+        if (requeryResult?.success && requeryResult?.data?.token) {
+          token = requeryResult.data.token;
+          units = requeryResult.data.units?.toString() || null;
+          break; //  Got token — exit loop
+        }
+
+        if (attempt < MAX_ATTEMPTS) {
+          this.logger.log(`Requery ${attempt} still pending — waiting ${DELAYS[attempt - 1] / 1000}s`);
+          await this.sleep(DELAYS[attempt - 1] || 60000);
+        }
+      }
+
+    } catch (error) {
+      this.logger.error(`Attempt ${attempt} error: ${error.message}`);
+
+      if (attempt < MAX_ATTEMPTS) {
+        await this.sleep(DELAYS[attempt - 1] || 60000);
+      }
     }
+  }
 
+  // ─── GOT TOKEN 
+  if (token) {
     await this.prisma.vendInvoice.update({
       where: { id: invoice.id },
       data: {
         status: 'SUCCESS',
-        token:  vendResult.token,
-        units:  vendResult.units?.toString(),
+        token,
+        units: units || null,
       },
     });
 
-    // Get user for notifications
     const user = await this.prisma.user.findUnique({
       where:  { id: invoice.userId },
       select: { email: true, firstName: true, fullName: true },
     });
 
     const firstName =
-      user?.firstName ||
+      user?.firstName              ||
       user?.fullName?.split(' ')[0] ||
       'Customer';
 
@@ -284,7 +329,7 @@ private async processConfirmedPayment(payload: any) {
       minute:   '2-digit',
     });
 
-    //  Send email receipt
+    // Send email
     if (user?.email) {
       this.mailService.sendEmail(
         user.email,
@@ -292,9 +337,9 @@ private async processConfirmedPayment(payload: any) {
         getMeterRechargeEmail({
           firstName,
           amount:        invoice.amount,
-          units:         vendResult.units?.toString() || '0',
+          units:         units || '0',
           meterNumber:   invoice.meter,
-          token:         vendResult.token || '',
+          token,
           disco:         invoice.disco,
           reference:     invoice.reference,
           date:          now,
@@ -303,58 +348,48 @@ private async processConfirmedPayment(payload: any) {
       ).catch((err) => this.logger.error(`Email failed: ${err.message}`));
     }
 
-    //  Push + in-app notifications
+    // Push + in-app
     await Promise.all([
       this.push.notifyElectricityPurchased(
         invoice.userId,
-        vendResult.token || '',
-        vendResult.units?.toString() || '0',
+        token,
+        units || '0',
         invoice.amount,
       ),
       this.notification.create({
         userId:  invoice.userId,
-        title:   ' Electricity Token Ready!',
-        message: `Payment received! Token: ${vendResult.token} | ${vendResult.units} kWh | Meter: ${invoice.meter}`,
+        title:   '⚡ Electricity Token Ready!',
+        message: `Token: ${token} | ${units} kWh | Meter: ${invoice.meter}`,
         type:    'ELECTRICITY',
-        metadata: {
-          token:     vendResult.token,
-          units:     vendResult.units,
-          meter:     invoice.meter,
-          reference: invoice.reference,
-        },
+        metadata: { token, units, meter: invoice.meter, reference: invoice.reference },
       }),
     ]);
 
-    this.logger.log(
-      ` Vend success — ref: ${reference}, token: ${vendResult.token}`,
-    );
-    return { received: true, success: true };
-
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : String(error);
-
-    this.logger.error(
-      `Vend failed after payment — ref: ${reference}:`,
-      message,
-    );
-
-    await this.prisma.vendInvoice.update({
-      where: { id: invoice.id },
-      data:  { status: 'FAILED' },
-    });
-
-    await this.notification.create({
-      userId:  invoice.userId,
-      title:   '❌ Electricity Vending Failed',
-      message: `Your payment was received but vending failed. ` +
-               `Contact support with reference: ${reference}. ` +
-               `We will resolve within 24 hours.`,
-      type:    'WARNING',
-    });
-
-    return { received: true, error: message };
+    this.logger.log(`✅ Vend success — token: ${token}`);
+    return;
   }
+
+  // ─── ALL ATTEMPTS FAILED
+  this.logger.error(`All ${MAX_ATTEMPTS} vend attempts failed — invoice: ${invoice.id}`);
+
+  // ✅ Don't mark as FAILED yet — let the re-query cron handle it
+  // Just log and notify support
+  await this.prisma.vendInvoice.update({
+    where: { id: invoice.id },
+    data:  { status: 'PENDING' }, // back to pending for cron to pick up
+  });
+
+  await this.notification.create({
+    userId:  invoice.userId,
+    title:   '⏳ Processing Your Electricity',
+    message: `Your payment was received. We are processing your electricity token and will notify you shortly. Reference: ${invoice.reference}`,
+    type:    'INFO',
+  });
+}
+
+// ─── SLEEP HELPER 
+private sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
   //  CHECK INVOICE STATUS 
@@ -393,7 +428,63 @@ private async processConfirmedPayment(payload: any) {
                                         ' Awaiting payment',
     };
   }
+async reQuery(orderId: string) {
+  try {
+    const response = await firstValueFrom(
+      this.httpService.get(
+        `${this.baseUrl}/v2/vend?orderId=${orderId}&getLastResponse=true`,
+        { headers: this.headers },
+      ),
+    );
 
+    const data     = response.data?.result ?? response.data;
+    const vendData = data?.data ?? data;
+
+    this.logger.log(`ReQuery response for ${orderId}: ${JSON.stringify(data)}`);
+
+    // ✅ Check all possible success indicators
+    if (
+      data?.status === true       ||
+      vendData?.responseCode === 100 ||
+      vendData?.responseCode === 200 ||
+      vendData?.token
+    ) {
+      // Update vendor transaction if exists
+      await this.prisma.vendorTransaction.updateMany({
+        where: { reference: orderId },
+        data: {
+          status: 'SUCCESS',
+          token:  vendData?.token,
+          units:  vendData?.units?.toString(),
+        },
+      }).catch(() => {}); // ignore if not found
+
+      return {
+        success: true,
+        data: {
+          token: vendData?.token,
+          units: vendData?.units,
+        },
+      };
+    }
+
+    // Still pending
+    return {
+      success: false,
+      pending: true,
+      data:    vendData,
+    };
+
+  } catch (error) {
+    const axiosError = error as any;
+    this.logger.error(`ReQuery failed for ${orderId}:`, axiosError?.response?.data);
+    return {
+      success: false,
+      pending: true,
+      error:   axiosError?.message,
+    };
+  }
+}
   //  GET USER INVOICES 
   async getUserInvoices(userId: string, page = 1, limit = 10) {
     const [invoices, total] = await Promise.all([
