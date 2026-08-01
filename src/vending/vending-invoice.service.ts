@@ -234,7 +234,10 @@ private async vendWithRequery(invoice: any) {
   const MAX_ATTEMPTS = 5;
   const DELAYS       = [20000, 40000, 60000, 60000, 60000]; // in ms — matches BuyPower's [20,40,60]
 
-  const vendReference = `vend-${invoice.reference}-${randomUUID()}`;
+  const vendReference = invoice.reference && invoice.reference.length <= 50
+    ? invoice.reference
+    : invoice.id?.slice(0, 50) || randomUUID().slice(0, 50);
+
   const normalizePhone = (phone?: string): string => {
     if (!phone) return '';
     const trimmed = phone.trim();
