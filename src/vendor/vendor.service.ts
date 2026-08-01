@@ -399,7 +399,7 @@ export class VendingService {
     try {
       const response = await firstValueFrom(
         this.httpService.post(
-          `${this.baseUrl}/v2/vend`,
+          `${this.baseUrl}/v2/vend?strict=0`,
           {
             orderId:     dto.reference,
             meter:       dto.meter,
@@ -411,6 +411,7 @@ export class VendingService {
             phone:       dto.phone,
             email:       dto.email || '',
             name:        dto.name  || 'Pay4Light Customer',
+            rtt:         false,
           },
           { headers: this.headers, timeout: 60000 },
         ),
