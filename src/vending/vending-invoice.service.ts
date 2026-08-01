@@ -259,17 +259,24 @@ private async vendWithRequery(invoice: any) {
 
         this.logger.log(`Attempt ${attempt} result: ${JSON.stringify(result)}`);
 
-        if (result.success && result.token) {
-          token = result.token;
-          units = result.units?.toString() || null;
-          break; //  Got token — exit loop
+        // Normalize token/units from multiple possible shapes
+        const directToken = result?.token ?? result?.data?.token ?? result?.data?.data?.token ?? null;
+        const directUnits = result?.units ?? result?.data?.units ?? result?.data?.data?.units ?? null;
+
+        if (directToken) {
+          token = directToken;
+          units = directUnits?.toString() || null;
+          break; // Got token — exit loop
         }
 
-        if (result.pending) {
+        if (result?.pending) {
           this.logger.log(`Attempt ${attempt} pending — waiting ${DELAYS[attempt - 1] / 1000}s`);
           await this.sleep(DELAYS[attempt - 1]);
           continue; // try requery next iteration
         }
+
+        // If result indicates failure (but not pending) log full payload for debugging
+        this.logger.warn(`Attempt ${attempt} failed without token — response: ${JSON.stringify(result)}`);
 
       } else {
         // Subsequent attempts — requery using orderId
@@ -279,10 +286,15 @@ private async vendWithRequery(invoice: any) {
 
         this.logger.log(`Requery result: ${JSON.stringify(requeryResult)}`);
 
-        if (requeryResult?.success && requeryResult?.data?.token) {
-          token = requeryResult.data.token;
-          units = requeryResult.data.units?.toString() || null;
-          break; //  Got token — exit loop
+        // Normalize token/units across possible response shapes
+        const rqData = requeryResult?.data ?? {};
+        const requeryToken = rqData?.token ?? rqData?.data?.token ?? rqData?.result?.data?.token ?? null;
+        const requeryUnits = rqData?.units ?? rqData?.data?.units ?? rqData?.result?.data?.units ?? null;
+
+        if (requeryToken) {
+          token = requeryToken;
+          units = requeryUnits?.toString() || null;
+          break; // Got token — exit loop
         }
 
         if (attempt < MAX_ATTEMPTS) {
