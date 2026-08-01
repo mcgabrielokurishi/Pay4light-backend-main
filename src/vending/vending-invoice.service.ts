@@ -259,9 +259,10 @@ private async vendWithRequery(invoice: any) {
 
         this.logger.log(`Attempt ${attempt} result: ${JSON.stringify(result)}`);
 
-        // Normalize token/units from multiple possible shapes
-        const directToken = result?.token ?? result?.data?.token ?? result?.data?.data?.token ?? null;
-        const directUnits = result?.units ?? result?.data?.units ?? result?.data?.data?.units ?? null;
+        // Normalize token/units from multiple possible shapes (cast to any for TS)
+        const r: any = result;
+        const directToken = r?.token ?? r?.data?.token ?? r?.data?.data?.token ?? null;
+        const directUnits = r?.units ?? r?.data?.units ?? r?.data?.data?.units ?? null;
 
         if (directToken) {
           token = directToken;
@@ -287,7 +288,7 @@ private async vendWithRequery(invoice: any) {
         this.logger.log(`Requery result: ${JSON.stringify(requeryResult)}`);
 
         // Normalize token/units across possible response shapes
-        const rqData = requeryResult?.data ?? {};
+        const rqData: any = (requeryResult as any)?.data ?? {};
         const requeryToken = rqData?.token ?? rqData?.data?.token ?? rqData?.result?.data?.token ?? null;
         const requeryUnits = rqData?.units ?? rqData?.data?.units ?? rqData?.result?.data?.units ?? null;
 
