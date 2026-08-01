@@ -6,6 +6,7 @@ import {
 import { PrismaService } from 'database/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
+import { firstValueFrom } from 'rxjs';
 import { BuypowerMfbService } from 'src/buypower-mfb/buypower-mfb.service';
 import { VendingService } from 'src/vendor/vendor.service';
 import { NotificationService } from 'src/notification/notification.service';
