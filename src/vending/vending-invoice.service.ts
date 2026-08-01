@@ -48,7 +48,7 @@ export class VendInvoiceService {
 
   //  GENERATE INVOICE ACCOUNT 
   async generateInvoice(userId: string, dto: VendElectricityLinkDto) {
-  const reference   = `PL_${Date.now()}_${Math.floor(Math.random() * 99999999)}`;
+  const reference   = `PL_${randomUUID()}`;
   const totalAmount = dto.amount + this.SERVICE_CHARGE;
 
   const user = await this.prisma.user.findUnique({
