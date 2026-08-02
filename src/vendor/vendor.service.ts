@@ -411,7 +411,7 @@ export class VendingService {
             phone:       dto.phone,
             email:       dto.email || '',
             name:        dto.name  || 'Pay4Light Customer',
-            rtt:         false,
+            rtt:         true, // wait for a synchronous vend result instead of a 202 + webhook
           },
           { headers: this.headers, timeout: 60000 },
         ),
@@ -657,71 +657,56 @@ export class VendingService {
     }
   }
 
-  //  RE-QUERY 
+  //  RE-QUERY — uses the single documented BuyPower requery endpoint
   async reQuery(orderId: string) {
-    const endpoints = [
-      `/v2/transaction/${orderId}`,
-      `/v2/vend?orderId=${orderId}&getLastResponse=true`,
-      `/v2/vend/requery?orderId=${orderId}`,
-      `/v2/vend/status?orderId=${orderId}`,
-      `/v2/requery?orderId=${orderId}`,
-    ];
+    const url = `${this.baseUrl}/v2/vend?orderId=${orderId}&getLastResponse=true`;
 
-    let lastError: any = null;
+    try {
+      this.logger.log(`ReQuery GET ${url}`);
 
-    for (const path of endpoints) {
-      try {
-        const url = `${this.baseUrl}${path}`;
-        this.logger.log(`ReQuery GET ${url}`);
+      const response = await firstValueFrom(
+        this.httpService.get(
+          url,
+          { headers: this.headers },
+        ),
+      );
 
-        const response = await firstValueFrom(
-          this.httpService.get(
-            url,
-            { headers: this.headers },
-          ),
-        );
+      const data     = response.data?.result ?? response.data;
+      const vendData = data?.data ?? data;
 
-        const data     = response.data?.result ?? response.data;
-        const vendData = data?.data ?? data;
+      this.logger.log(`ReQuery response for ${orderId}: ${JSON.stringify(data)}`);
 
-        this.logger.log(`ReQuery response for ${orderId} via ${path}: ${JSON.stringify(data)}`);
-
-        if (vendData?.responseCode === 100 || vendData?.responseCode === 200 || data?.status === true) {
-          await this.prisma.vendorTransaction.updateMany({
-            where: { reference: orderId },
-            data: {
-              status:          'SUCCESS',
-              token:           vendData?.token,
-              units:           vendData?.units?.toString(),
-              responsePayload: data,
-            },
-          });
-        }
-
-        return {
-          success: data?.status ?? false,
-          pending: [202, 500, 502, 503].includes(vendData?.responseCode),
-          data:    vendData,
-        };
-
-      } catch (error) {
-        const axiosError = error as any;
-        lastError = axiosError;
-
-        const status = axiosError?.response?.status;
-        const message = axiosError?.response?.data?.message || axiosError?.message;
-
-        this.logger.warn(`ReQuery path ${path} failed: ${status} ${message}`);
-
-        if (status && status !== 404 && status !== 400) {
-          throw new BadRequestException(message || 'Re-query failed');
-        }
+      if (vendData?.responseCode === 100 || vendData?.responseCode === 200 || data?.status === true) {
+        await this.prisma.vendorTransaction.updateMany({
+          where: { reference: orderId },
+          data: {
+            status:          'SUCCESS',
+            token:           vendData?.token,
+            units:           vendData?.units?.toString(),
+            responsePayload: data,
+          },
+        });
       }
-    }
 
-    throw new BadRequestException(
-      lastError?.response?.data?.message || 'Re-query failed',
-    );
+      return {
+        success: data?.status ?? false,
+        pending: [202, 500, 502, 503].includes(vendData?.responseCode),
+        data:    vendData,
+      };
+
+    } catch (error) {
+      const axiosError = error as any;
+      const message = axiosError?.response?.data?.message || axiosError?.message;
+
+      this.logger.error(`ReQuery failed for ${orderId}: ${message}`);
+
+      return {
+        success: false,
+        pending: true,
+        data:    null,
+        error:   message,
+      };
+    }
   }
 
   //  GET PRICE LIST 
