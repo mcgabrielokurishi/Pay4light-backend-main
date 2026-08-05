@@ -11,6 +11,7 @@ import { WalletService } from 'src/wallet/wallet.service';
 import { firstValueFrom } from 'rxjs';
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
+import { BuypowerMfbService } from 'src/buypower-mfb/buypower-mfb.service';
 import { MailService } from 'src/common/services/mail.service';
 import { NotificationService } from 'src/notification/notification.service';
 import { getMeterRechargeEmail } from 'src/common/template/email.template';
