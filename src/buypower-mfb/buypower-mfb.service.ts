@@ -115,7 +115,7 @@ export class BuypowerMfbService {
     try {
       const response = await firstValueFrom(
         this.httpService.get(
-          `${this.baseUrl}/v1/accounts/reserved/${reference}`,
+          `${this.baseUrl}/api/banking/virtual/accounts/reserved`,
           { headers: this.headers },
         ),
       );
