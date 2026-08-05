@@ -128,6 +128,33 @@ export class BuypowerMfbService {
     }
   }
 
+ 
+// Get reserved account balance for a user
+async getReservedAccountBalance(exchangeRef: string) {
+  try {
+    const response = await firstValueFrom(
+      this.httpService.get(
+        `${this.baseUrl}/v2/accounts/reserved/${exchangeRef}/balance`,
+        { headers: this.headers, timeout: 15000 },
+      ),
+    );
+
+    this.logger.log(`Balance for ${exchangeRef}: ${JSON.stringify(response.data)}`);
+    return response.data;
+
+  } catch (error) {
+    const axiosError = error as any;
+    this.logger.error(
+      `Failed to get balance for ${exchangeRef}:`,
+      axiosError?.response?.data,
+    );
+    throw new BadRequestException(
+      axiosError?.response?.data?.message || 'Failed to get account balance',
+    );
+  }
+}
+
+
   //  GET ALL RESERVED ACCOUNTS
   async getAllReservedAccounts() {
     try {
