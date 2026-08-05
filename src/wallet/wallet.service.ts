@@ -37,13 +37,55 @@ export class WalletService {
     });
   }
 
-  // GET WALLET
+  // GET WALLET WITH RESERVED ACCOUNT BALANCE
   async getWallet(userId: string) {
     const wallet = await this.prisma.wallet.findUnique({
       where: { userId },
     });
     if (!wallet) throw new BadRequestException("Wallet not found");
-    return wallet;
+    
+    // Also fetch reserved account balance if account is provisioned
+    let reservedBalance = null;
+    if (wallet.virtualAccountNuban) {
+      try {
+        const balanceResponse = await this.buypowermfb.getReservedAccountBalance(
+          wallet.virtual_account_ref || userId,
+        );
+        reservedBalance = balanceResponse?.data?.balance ?? balanceResponse?.balance ?? 0;
+      } catch (error) {
+        this.logger.warn(`Could not fetch reserved account balance for user ${userId}`, error);
+      }
+    }
+    
+    return {
+      ...wallet,
+      reservedAccountBalance: reservedBalance,
+    };
+  }
+
+  // GET RESERVED ACCOUNT BALANCE FROM BUYPOWER MFB
+  async getReservedAccountBalance(userId: string) {
+    try {
+      const wallet = await this.prisma.wallet.findUnique({
+        where: { userId },
+        select: { virtualAccountNuban: true, virtual_account_ref: true },
+      });
+
+      if (!wallet?.virtualAccountNuban) {
+        throw new BadRequestException('Reserved account not provisioned for this user');
+      }
+
+      // Use virtual_account_ref (userId) as the exchangeRef for balance check
+      const balanceResponse = await this.buypowermfb.getReservedAccountBalance(
+        wallet.virtual_account_ref || userId,
+      );
+
+      return balanceResponse;
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      this.logger.error(`Failed to get reserved account balance for user ${userId}:`, error);
+      throw new BadRequestException('Failed to retrieve account balance');
+    }
   }
 
   // PROVISION VIRTUAL ACCOUNT

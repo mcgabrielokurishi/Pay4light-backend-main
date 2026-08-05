@@ -1,5 +1,3 @@
-
-
 import {
   Injectable,
   Logger,
@@ -36,7 +34,8 @@ export class VendingService {
     private readonly notificationService:  NotificationService,
     private readonly mailService:         MailService,
     private readonly push:                 PushNotificationService,
-    private readonly notifManager: NotificationManagerService
+    private readonly notifManager: NotificationManagerService,
+    private readonly buypowerMfb:          BuypowerMfbService,
   ) {
     this.baseUrl = this.configService.get<string>('BUYPOWER_BASE_URL_FOR_METER_VEND') || 'https://api.buypower.ng';
     this.apiKey  = this.configService.get<string>('BUYPOWER_API_KEY_FOR_METER_VEND')  || '';
@@ -121,21 +120,32 @@ export class VendingService {
   const amount         = new Prisma.Decimal(dto.amount.toString());
   const totalDecimal   = new Prisma.Decimal(totalAmount.toString());
 
-  // WALLET CHECKS 
+  // CHECK BUYPOWER MFB RESERVED ACCOUNT BALANCE
+  try {
+    const balanceResponse = await this.buypowerMfb.getReservedAccountBalance(userId);
+    const reservedBalance = balanceResponse?.data?.balance ?? balanceResponse?.balance ?? 0;
+
+    if (Number(reservedBalance) < totalAmount) {
+      throw new BadRequestException(
+        `Insufficient balance in your reserved account. You need ₦${totalAmount.toLocaleString()} ` +
+        `(₦${dto.amount.toLocaleString()} electricity + ₦${SERVICE_CHARGE} service charge). ` +
+        `Your reserved account balance is ₦${Number(reservedBalance).toLocaleString()}. ` +
+        `Please fund your account and try again.`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof BadRequestException) throw error;
+    this.logger.error('Failed to check reserved account balance:', error);
+    throw new BadRequestException('Failed to verify account balance. Please try again.');
+  }
+
+  // ALSO CHECK INTERNAL WALLET FOR DEBIT OPERATION
   const userWallet = await this.prisma.wallet.findUnique({
     where: { userId },
   });
 
   if (!userWallet) throw new BadRequestException('Wallet not found');
   if (userWallet.locked) throw new BadRequestException('Wallet is locked. Contact support.');
-
-  if (Number(userWallet.balance) < totalAmount) {
-    throw new BadRequestException(
-      `Insufficient balance. You need ₦${totalAmount.toLocaleString()} ` +
-      `(₦${dto.amount.toLocaleString()} electricity + ₦${SERVICE_CHARGE} service charge). ` +
-      `Your balance is ₦${Number(userWallet.balance).toLocaleString()}.`,
-    );
-  }
 
   // GET USER INFO 
   const user = await this.prisma.user.findUnique({
@@ -458,15 +468,27 @@ export class VendingService {
     const amount    = new Prisma.Decimal(dto.amount.toString());
     const reference = orderId;
 
-    //  Check user wallet balance
+    // CHECK BUYPOWER MFB RESERVED ACCOUNT BALANCE
+    try {
+      const balanceResponse = await this.buypowerMfb.getReservedAccountBalance(userId);
+      const reservedBalance = balanceResponse?.data?.balance ?? balanceResponse?.balance ?? 0;
+
+      if (Number(reservedBalance) < dto.amount) {
+        throw new BadRequestException(
+          `Insufficient balance in your reserved account. You have ₦${Number(reservedBalance).toLocaleString()} but need ₦${dto.amount.toLocaleString()}. ` +
+          `Please fund your account and try again.`,
+        );
+      }
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      this.logger.error('Failed to check reserved account balance:', error);
+      throw new BadRequestException('Failed to verify account balance. Please try again.');
+    }
+
+    //  Also check internal wallet for transaction tracking
     const userWallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!userWallet) throw new BadRequestException('Wallet not found');
     if (userWallet.locked) throw new BadRequestException('Wallet is locked');
-    if (Number(userWallet.balance) < dto.amount) {
-      throw new BadRequestException(
-        `Insufficient balance. You have ₦${Number(userWallet.balance).toLocaleString()} but need ₦${dto.amount.toLocaleString()}`,
-      );
-    }
 
     const user = await this.prisma.user.findUnique({
       where:  { id: userId },
@@ -560,15 +582,27 @@ export class VendingService {
     const amount    = new Prisma.Decimal(dto.amount.toString());
     const reference = orderId;
 
-    //  Check user wallet balance
+    // CHECK BUYPOWER MFB RESERVED ACCOUNT BALANCE
+    try {
+      const balanceResponse = await this.buypowerMfb.getReservedAccountBalance(userId);
+      const reservedBalance = balanceResponse?.data?.balance ?? balanceResponse?.balance ?? 0;
+
+      if (Number(reservedBalance) < dto.amount) {
+        throw new BadRequestException(
+          `Insufficient balance in your reserved account. You have ₦${Number(reservedBalance).toLocaleString()} but need ₦${dto.amount.toLocaleString()}. ` +
+          `Please fund your account and try again.`,
+        );
+      }
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      this.logger.error('Failed to check reserved account balance:', error);
+      throw new BadRequestException('Failed to verify account balance. Please try again.');
+    }
+
+    //  Also check internal wallet for transaction tracking
     const userWallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!userWallet) throw new BadRequestException('Wallet not found');
     if (userWallet.locked) throw new BadRequestException('Wallet is locked');
-    if (Number(userWallet.balance) < dto.amount) {
-      throw new BadRequestException(
-        `Insufficient balance. You have ₦${Number(userWallet.balance).toLocaleString()} but need ₦${dto.amount.toLocaleString()}`,
-      );
-    }
 
     const user = await this.prisma.user.findUnique({
       where:  { id: userId },

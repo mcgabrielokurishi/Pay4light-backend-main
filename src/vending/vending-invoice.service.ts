@@ -256,7 +256,7 @@ private async vendWithRequery(invoice: any) {
 
     try {
 
-      // First attempt — call vend directly
+      
       if (attempt === 1) {
         const result = await this.vendingService.vendElectricityDirect({
           userId:    invoice.userId,

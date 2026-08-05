@@ -34,10 +34,19 @@ export class WalletController {
 
  
   // GET /wallet
-  
   @Get()
   async getWallet(@Req() req: any) {
     return this.walletService.getWallet(req.user.id);
+  }
+
+  // GET /wallet/reserved-balance
+  @Get('reserved-balance')
+  async getReservedBalance(@Req() req: any) {
+    const balanceData = await this.walletService.getReservedAccountBalance(req.user.id);
+    return {
+      success: true,
+      data: balanceData,
+    };
   }
 
   

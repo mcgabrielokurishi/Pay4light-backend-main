@@ -300,7 +300,7 @@ export class AuthService {
       data: { verified: true },
     });
 
-    // Generate reset token — valid for 10 minutes
+    // Generate reset token — valid for 10 minutesz
     const resetToken = randomUUID();
 
     this.resetTokens.set(resetToken, {
