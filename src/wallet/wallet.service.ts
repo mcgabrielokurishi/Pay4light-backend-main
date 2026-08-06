@@ -62,6 +62,70 @@ export class WalletService {
       reservedAccountBalance: reservedBalance,
     };
   }
+  
+  async backfillReservedAccountRefs() {
+  const allAccounts = await this.buypowermfb.getAllReservedAccounts();
+
+  // Log the raw shape once so we can confirm field names against real data.
+  this.logger.log(`BuyPower getAllReservedAccounts raw: ${JSON.stringify(allAccounts).slice(0, 2000)}`);
+
+  const accountsList =
+    allAccounts?.data?.data || allAccounts?.data || allAccounts || [];
+
+  if (!Array.isArray(accountsList)) {
+    throw new InternalServerErrorException(
+      'Unexpected shape from getAllReservedAccounts — check logs and adjust parsing',
+    );
+  }
+
+  const wallets = await this.prisma.wallet.findMany({
+    where: { virtualAccountNuban: { not: null } },
+    select: { id: true, userId: true, virtualAccountNuban: true, virtual_account_ref: true },
+  });
+
+  const results: any[] = [];
+
+  for (const wallet of wallets) {
+    // Match by the reference we originally sent (user.id), falling back to nuban.
+    const match = accountsList.find((acc: any) => {
+      const accReference = acc?.reference || acc?.accountReference;
+      const accNuban     = acc?.nuban || acc?.accountNumber;
+      return accReference === wallet.userId || accNuban === wallet.virtualAccountNuban;
+    });
+
+    if (!match) {
+      this.logger.warn(`No BuyPower match found for userId ${wallet.userId} (nuban: ${wallet.virtualAccountNuban})`);
+      results.push({ userId: wallet.userId, status: 'no_match' });
+      continue;
+    }
+
+    const exchangeRef =
+      match?.exchangeRef || match?.accountReference || match?.id || null;
+
+    if (!exchangeRef) {
+      this.logger.warn(`Match found for ${wallet.userId} but no exchangeRef-like field: ${JSON.stringify(match)}`);
+      results.push({ userId: wallet.userId, status: 'match_no_ref', raw: match });
+      continue;
+    }
+
+    if (wallet.virtual_account_ref === exchangeRef) {
+      results.push({ userId: wallet.userId, status: 'already_correct' });
+      continue;
+    }
+
+    await this.prisma.wallet.update({
+      where: { id: wallet.id },
+      data:  { virtual_account_ref: exchangeRef },
+    });
+
+    this.logger.log(`Backfilled ${wallet.userId}: ${wallet.virtual_account_ref} → ${exchangeRef}`);
+    results.push({ userId: wallet.userId, status: 'updated', oldRef: wallet.virtual_account_ref, newRef: exchangeRef });
+  }
+
+  return results;
+}
+
+
 
   // GET RESERVED ACCOUNT BALANCE FROM BUYPOWER MFB
   async getReservedAccountBalance(userId: string) {

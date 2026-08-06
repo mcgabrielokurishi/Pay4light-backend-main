@@ -2,7 +2,6 @@ import {
   Injectable,
   Logger,
   BadRequestException,
-  InternalServerErrorException,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
@@ -26,17 +25,18 @@ export class VendingService {
   private readonly logger  = new Logger(VendingService.name);
   private readonly baseUrl: string;
   private readonly apiKey:  string;
+  private readonly SERVICE_CHARGE = 100;
 
   constructor(
-    private readonly httpService:          HttpService,
-    private readonly configService:        ConfigService,
-    private readonly prisma:               PrismaService,
-    private readonly walletService:        WalletService,
-    private readonly notificationService:  NotificationService,
+    private readonly httpService:         HttpService,
+    private readonly configService:       ConfigService,
+    private readonly prisma:              PrismaService,
+    private readonly walletService:       WalletService,
+    private readonly notificationService: NotificationService,
     private readonly mailService:         MailService,
-    private readonly push:                 PushNotificationService,
-    private readonly notifManager: NotificationManagerService,
-    private readonly buypowerMfb:          BuypowerMfbService,
+    private readonly push:                PushNotificationService,
+    private readonly notifManager:        NotificationManagerService,
+    private readonly buypowerMfb:         BuypowerMfbService,
   ) {
     this.baseUrl = this.configService.get<string>('BUYPOWER_BASE_URL_FOR_METER_VEND') || 'https://api.buypower.ng';
     this.apiKey  = this.configService.get<string>('BUYPOWER_API_KEY_FOR_METER_VEND')  || '';
@@ -49,7 +49,7 @@ export class VendingService {
     };
   }
 
-  //  CHECK METER 
+  // ─── CHECK METER ──
   async checkMeter(meter: string, disco: string, vendType: string) {
     try {
       const response = await firstValueFrom(
@@ -71,7 +71,7 @@ export class VendingService {
     }
   }
 
-  // CHECK DISCO STATUS 
+  // ─── CHECK DISCO STATUS 
   async checkDiscoStatus() {
     try {
       const response = await firstValueFrom(
@@ -86,316 +86,347 @@ export class VendingService {
     }
   }
 
-  // GET BUYPOWER WALLET BALANCE 
-
+  // ─── GET BUYPOWER VENDING WALLET BALANCE ─────────────────────────
   async getBuyPowerBalance(): Promise<number> {
     try {
       const response = await firstValueFrom(
         this.httpService.get(
-          `${this.baseUrl}/v2/wallet/balance`, 
+          `${this.baseUrl}/v2/wallet/balance`,
           { headers: this.headers },
         ),
       );
-
       const balance = response.data?.balance ?? 0;
-      this.logger.log(`BuyPower wallet balance: ${balance}`);
+      this.logger.log(`BuyPower vending wallet balance: ${balance}`);
       return Number(balance);
-
     } catch (error) {
-      const axiosError = error as any;
-      this.logger.error(
-        'Failed to fetch BuyPower balance:',
-        axiosError?.response?.data,
-      );
-      // Don't block vending if balance check fails — log and continue
-      return 999999;
+      this.logger.error('Failed to fetch BuyPower vending balance');
+      return 999999; // don't block vending if check fails
     }
   }
 
-  //  VEND ELECTRICITY
- async vendElectricity(userId: string, dto: VendElectricityDto) {
-  const SERVICE_CHARGE = 100;
-  const totalAmount    = dto.amount + SERVICE_CHARGE;
-  const orderId        = randomUUID();
-  const reference      = orderId;
-  const amount         = new Prisma.Decimal(dto.amount.toString());
-  const totalDecimal   = new Prisma.Decimal(totalAmount.toString());
+  // ─── GET USER RESERVED ACCOUNT BALANCE ───────────────────────────
+  private async getUserReservedBalance(userId: string): Promise<number> {
+    try {
+      const balanceResponse = await this.buypowerMfb.getReservedAccountBalance(userId);
+      const balance = balanceResponse?.data?.balance ?? balanceResponse?.balance ?? 0;
+      this.logger.log(`User ${userId} reserved balance: ₦${balance}`);
+      return Number(balance);
+    } catch (error) {
+      this.logger.error(`Failed to get reserved balance for ${userId}:`, error.message);
+      return -1; // signal failure
+    }
+  }
 
-  // CHECK BUYPOWER MFB RESERVED ACCOUNT BALANCE
-  try {
-    const balanceResponse = await this.buypowerMfb.getReservedAccountBalance(userId);
-    const reservedBalance = balanceResponse?.data?.balance ?? balanceResponse?.balance ?? 0;
+  // ─── VEND ELECTRICITY ─────────────────────────────────────────────
+  async vendElectricity(userId: string, dto: VendElectricityDto) {
+    const totalAmount  = dto.amount + this.SERVICE_CHARGE;
+    const orderId      = randomUUID();
+    const reference    = orderId;
+    const totalDecimal = new Prisma.Decimal(totalAmount.toString());
 
-    if (Number(reservedBalance) < totalAmount) {
+    // ✅ CHECK 1 — BuyPower MFB reserved account balance
+    const reservedBalance = await this.getUserReservedBalance(userId);
+
+    if (reservedBalance === -1) {
       throw new BadRequestException(
-        `Insufficient balance in your reserved account. You need ₦${totalAmount.toLocaleString()} ` +
-        `(₦${dto.amount.toLocaleString()} electricity + ₦${SERVICE_CHARGE} service charge). ` +
-        `Your reserved account balance is ₦${Number(reservedBalance).toLocaleString()}. ` +
-        `Please fund your account and try again.`,
+        'Unable to verify your account balance. Please try again.',
       );
     }
-  } catch (error) {
-    if (error instanceof BadRequestException) throw error;
-    this.logger.error('Failed to check reserved account balance:', error);
-    throw new BadRequestException('Failed to verify account balance. Please try again.');
-  }
 
-  // ALSO CHECK INTERNAL WALLET FOR DEBIT OPERATION
-  const userWallet = await this.prisma.wallet.findUnique({
-    where: { userId },
-  });
-
-  if (!userWallet) throw new BadRequestException('Wallet not found');
-  if (userWallet.locked) throw new BadRequestException('Wallet is locked. Contact support.');
-
-  // GET USER INFO 
-  const user = await this.prisma.user.findUnique({
-    where:  { id: userId },
-    select: {
-      email:     true,
-      fullName:  true,
-      firstName: true,
-      lastName:  true,
-    },
-  });
-
-  const customerName =
-    dto.name ||
-    user?.fullName ||
-    `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() ||
-    'Pay4Light Customer';
-
-  const firstName =
-    user?.firstName ||
-    user?.fullName?.split(' ')[0] ||
-    'Customer';
-
-  //  NOTIFY USER ABOUT SERVICE CHARGE 
-  await this.notificationService.create({
-    userId,
-    title:   ' Service Charge Notice',
-    message: `A service charge of ₦${SERVICE_CHARGE} will be deducted alongside your ` +
-             `₦${dto.amount.toLocaleString()} electricity purchase. Total: ₦${totalAmount.toLocaleString()}.`,
-    type:    'INFO',
-  });
-
-  //  SAVE PENDING TRANSACTION 
-  await this.prisma.vendorTransaction.create({
-    data: {
-      userId,
-      reference,
-      provider:       'BUYPOWER',
-      serviceType:    'ELECTRICITY',
-      meterID:        dto.meter,
-      amount:         dto.amount,
-      status:         'PENDING',
-      requestPayload: JSON.parse(JSON.stringify(dto)),
-    },
-  });
-
-  //  DEBIT WALLET (electricity + service charge) 
-  await this.walletService.debitWithIdempotency(
-    userId,
-    totalDecimal,
-    reference,
-    `Electricity ₦${dto.amount.toLocaleString()} + Service charge ₦${SERVICE_CHARGE}`,
-  );
-
-  //  RECORD SERVICE CHARGE AS REVENUE 
-  await this.prisma.revenueEntry.create({
-    data: {
-      userId,
-      amount:      SERVICE_CHARGE,
-      type:        'ELECTRICITY',
-      reference:   `svc-${reference}`,
-      description: `Service charge for electricity vend — meter ${dto.meter}`,
-    },
-  });
-
-  // CALL BUYPOWER 
-  try {
-    const response = await firstValueFrom(
-      this.httpService.post(
-        `${this.baseUrl}/v2/vend`,
-        {
-          orderId,
-          meter:       dto.meter,
-          disco:       dto.disco,
-          vendType:    dto.vendType,
-          paymentType: 'B2B',
-          vertical:    'ELECTRICITY',
-          amount:      dto.amount.toString(), // original amount only — not total
-          phone:       dto.phone,
-          email:       dto.email || user?.email || '',
-          name:        customerName,
-        },
-        { headers: this.headers, timeout: 60000 },
-      ),
-    );
-
-    const data         = response.data;
-    const responseCode = data?.responseCode ?? data?.data?.responseCode;
-
-    // ─── PENDING 
-    if ([202, 500, 502, 503].includes(responseCode)) {
-      await this.prisma.vendorTransaction.update({
-        where: { reference },
-        data:  { status: 'PENDING', responsePayload: data },
-      });
-
-      return {
-        success:       false,
-        pending:       true,
-        message:       'Transaction is being processed. Please check back shortly.',
-        orderId,
-        reference,
-        amountPaid:    dto.amount,
-        serviceCharge: SERVICE_CHARGE,
-        totalDeducted: totalAmount,
-      };
+    if (reservedBalance < totalAmount) {
+      throw new BadRequestException(
+        `Insufficient balance. You need ₦${totalAmount.toLocaleString()} ` +
+        `(₦${dto.amount.toLocaleString()} electricity + ₦${this.SERVICE_CHARGE} service charge). ` +
+        `Your balance is ₦${reservedBalance.toLocaleString()}. Please fund your account.`,
+      );
     }
 
-    // ─── SUCCESS 
-    if (data?.status === true && responseCode === 200) {
-      const vendData = data.data;
+    // ✅ CHECK 2 — Wallet not locked
+    const userWallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!userWallet) throw new BadRequestException('Wallet not found');
+    if (userWallet.locked) throw new BadRequestException('Wallet is locked. Contact support.');
 
-      await this.prisma.vendorTransaction.update({
-        where: { reference },
-        data: {
-          status:          'SUCCESS',
-          responsePayload: data,
-          token:           vendData?.token,
-          units:           vendData?.units?.toString(),
-        },
-      });
+    // ✅ CHECK 3 — BuyPower vending wallet has enough
+    const bpBalance = await this.getBuyPowerBalance();
+    if (bpBalance < dto.amount) {
+      throw new BadRequestException(
+        'Service temporarily unavailable. Please try again in a few minutes.',
+      );
+    }
 
-      // Get meter details for email
-      const meter = await this.prisma.meter.findFirst({
-        where:   { meterNumber: dto.meter },
-        include: { disco: true },
-      });
+    // ─── GET USER INFO ─
+    const user = await this.prisma.user.findUnique({
+      where:  { id: userId },
+      select: { email: true, fullName: true, firstName: true, lastName: true },
+    });
 
-      const now = new Date().toLocaleString('en-NG', {
-        timeZone: 'Africa/Lagos',
-        day:      'numeric',
-        month:    'long',
-        year:     'numeric',
-        hour:     '2-digit',
-        minute:   '2-digit',
-      });
+    const customerName =
+      dto.name ||
+      user?.fullName ||
+      `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() ||
+      'Pay4Light Customer';
 
-      // Send email receipt
-      if (user?.email) {
-        this.mailService.sendEmail(
-          user.email,
-          ' Meter Recharged — Your Token is Ready',
-          getMeterRechargeEmail({
-            firstName,
-            amount:        dto.amount,
-            units:         vendData?.units?.toString() || '0',
-            meterNumber:   dto.meter,
-            token:         vendData?.token || '',
-            disco:         meter?.disco?.name || dto.disco,
-            reference,
-            date:          now,
-            paymentMethod: 'Wallet',
-            meterNickname: meter?.address || 'My Meter',
-          }),
-        ).catch((err) =>
-          this.logger.error(`Failed to send recharge email: ${err.message}`),
-        );
-      }
+    const firstName =
+      user?.firstName ||
+      user?.fullName?.split(' ')[0] ||
+      'Customer';
 
-      // In-app + push notifications
-      await Promise.all([
-        this.notificationService.create({
-          userId,
-          title:   ' Electricity Purchased Successfully',
-          message: `Token: ${vendData?.token} | Units: ${vendData?.units} kWh | ` +
-                   `₦${dto.amount.toLocaleString()} electricity + ₦${SERVICE_CHARGE} service charge deducted.`,
-          type:    'ELECTRICITY',
-        }),
-        this.push.notifyElectricityPurchased(
-          userId,
-          vendData?.token,
-          vendData?.units,
-          dto.amount,
+    // ─── NOTIFY SERVICE CHARGE ──────────────────────────────────────
+    await this.notificationService.create({
+      userId,
+      title:   '💡 Service Charge Notice',
+      message: `A service charge of ₦${this.SERVICE_CHARGE} will be deducted alongside your ` +
+               `₦${dto.amount.toLocaleString()} electricity purchase. Total: ₦${totalAmount.toLocaleString()}.`,
+      type:    'INFO',
+    });
+
+    // ─── SAVE PENDING TRANSACTION ───────────────────────────────────
+    await this.prisma.vendorTransaction.create({
+      data: {
+        userId,
+        reference,
+        provider:       'BUYPOWER',
+        serviceType:    'ELECTRICITY',
+        meterID:        dto.meter,
+        amount:         dto.amount,
+        status:         'PENDING',
+        requestPayload: JSON.parse(JSON.stringify(dto)),
+      },
+    });
+
+    // ✅ DEBIT INTERNAL WALLET
+    // Sync reserved balance to internal wallet first if needed
+    await this.syncAndDebit(userId, userWallet, totalDecimal, reference, dto.amount);
+
+    // ─── RECORD SERVICE CHARGE AS REVENUE 
+    await this.prisma.revenueEntry.create({
+      data: {
+        userId,
+        amount:      this.SERVICE_CHARGE,
+        type:        'ELECTRICITY',
+        reference:   `svc-${reference}`,
+        description: `Service charge for electricity vend — meter ${dto.meter}`,
+      },
+    });
+
+    // ─── CALL BUYPOWER ─
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(
+          `${this.baseUrl}/v2/vend`,
+          {
+            orderId,
+            meter:       dto.meter,
+            disco:       dto.disco,
+            vendType:    dto.vendType,
+            paymentType: 'B2B',
+            vertical:    'ELECTRICITY',
+            amount:      dto.amount.toString(),
+            phone:       dto.phone,
+            email:       dto.email || user?.email || '',
+            name:        customerName,
+          },
+          { headers: this.headers, timeout: 60000 },
         ),
-      ]);
+      );
 
-      return {
-        success:       true,
-        message:       'Electricity purchased successfully',
-        serviceCharge: SERVICE_CHARGE,
-        totalDeducted: totalAmount,
-        data: {
+      const data         = response.data;
+      const responseCode = data?.responseCode ?? data?.data?.responseCode;
+
+      this.logger.log(`Vend response: ${JSON.stringify(data)}`);
+
+      // PENDING
+      if ([202, 500, 502, 503].includes(responseCode)) {
+        await this.prisma.vendorTransaction.update({
+          where: { reference },
+          data:  { status: 'PENDING', responsePayload: data },
+        });
+        return {
+          success:       false,
+          pending:       true,
+          message:       'Transaction is being processed. Please check back shortly.',
           orderId,
           reference,
-          token:           vendData?.token,
-          units:           vendData?.units,
-          amountPaid:      dto.amount,
-          serviceCharge:   SERVICE_CHARGE,
-          totalDeducted:   totalAmount,
-          amountGenerated: vendData?.amountGenerated,
-          tax:             vendData?.tax,
-          receiptNo:       vendData?.receiptNo,
-          disco:           vendData?.disco,
-          debtAmount:      vendData?.debtAmount,
-          debtRemaining:   vendData?.debtRemaining,
-        },
-      };
-    }
+          amountPaid:    dto.amount,
+          serviceCharge: this.SERVICE_CHARGE,
+          totalDeducted: totalAmount,
+        };
+      }
 
-    throw new Error(data?.message || 'Vending failed');
+      // SUCCESS
+      if (data?.status === true && responseCode === 200) {
+        const vendData = data.data;
 
-  } catch (error) {
-    const axiosError   = error as any;
-    const errorData    = axiosError?.response?.data;
-    const errorMsg     = errorData?.message || axiosError?.message || 'Vending failed';
-    const responseCode = errorData?.responseCode;
+        await this.prisma.vendorTransaction.update({
+          where: { reference },
+          data: {
+            status:          'SUCCESS',
+            responsePayload: data,
+            token:           vendData?.token,
+            units:           vendData?.units?.toString(),
+          },
+        });
 
-    this.logger.error(`Vending failed — orderId: ${orderId}`, errorData);
+        const meter = await this.prisma.meter.findFirst({
+          where:   { meterNumber: dto.meter },
+          include: { disco: true },
+        });
 
-    // Still pending — don't refund
-    if ([202, 500, 502, 503].includes(responseCode)) {
-      await this.prisma.vendorTransaction.update({
-        where: { reference },
-        data:  { status: 'PENDING', responsePayload: errorData },
+        const now = new Date().toLocaleString('en-NG', {
+          timeZone: 'Africa/Lagos',
+          day:      'numeric',
+          month:    'long',
+          year:     'numeric',
+          hour:     '2-digit',
+          minute:   '2-digit',
+        });
+
+        if (user?.email) {
+          this.mailService.sendEmail(
+            user.email,
+            '⚡ Meter Recharged — Your Token is Ready',
+            getMeterRechargeEmail({
+              firstName,
+              amount:        dto.amount,
+              units:         vendData?.units?.toString() || '0',
+              meterNumber:   dto.meter,
+              token:         vendData?.token || '',
+              disco:         meter?.disco?.name || dto.disco,
+              reference,
+              date:          now,
+              paymentMethod: 'Wallet',
+              meterNickname: meter?.address || 'My Meter',
+            }),
+          ).catch((err) =>
+            this.logger.error(`Failed to send recharge email: ${err.message}`),
+          );
+        }
+
+        await Promise.all([
+          this.notificationService.create({
+            userId,
+            title:   '⚡ Electricity Purchased Successfully',
+            message: `Token: ${vendData?.token} | Units: ${vendData?.units} kWh | ` +
+                     `₦${dto.amount.toLocaleString()} + ₦${this.SERVICE_CHARGE} service charge deducted.`,
+            type:    'ELECTRICITY',
+          }),
+          this.push.notifyElectricityPurchased(
+            userId,
+            vendData?.token,
+            vendData?.units,
+            dto.amount,
+          ),
+        ]);
+
+        return {
+          success:       true,
+          message:       'Electricity purchased successfully',
+          serviceCharge: this.SERVICE_CHARGE,
+          totalDeducted: totalAmount,
+          data: {
+            orderId,
+            reference,
+            token:           vendData?.token,
+            units:           vendData?.units,
+            amountPaid:      dto.amount,
+            serviceCharge:   this.SERVICE_CHARGE,
+            totalDeducted:   totalAmount,
+            amountGenerated: vendData?.amountGenerated,
+            tax:             vendData?.tax,
+            receiptNo:       vendData?.receiptNo,
+            disco:           vendData?.disco,
+            debtAmount:      vendData?.debtAmount,
+            debtRemaining:   vendData?.debtRemaining,
+          },
+        };
+      }
+
+      throw new Error(data?.message || 'Vending failed');
+
+    } catch (error) {
+      const axiosError   = error as any;
+      const errorData    = axiosError?.response?.data;
+      const errorMsg     = errorData?.message || axiosError?.message || 'Vending failed';
+      const responseCode = errorData?.responseCode;
+
+      this.logger.error(`Vending failed — orderId: ${orderId}`, errorData);
+
+      if ([202, 500, 502, 503].includes(responseCode)) {
+        await this.prisma.vendorTransaction.update({
+          where: { reference },
+          data:  { status: 'PENDING', responsePayload: errorData },
+        });
+        return {
+          success:   false,
+          pending:   true,
+          message:   'Transaction is being processed. Re-query after 2 minutes.',
+          orderId,
+          reference,
+        };
+      }
+
+      // Refund on definite failure
+      await this.walletService.credit(
+        userId,
+        totalDecimal,
+        `Refund — electricity purchase failed (${orderId}) including service charge`,
+      );
+
+      await this.prisma.revenueEntry.deleteMany({
+        where: { reference: `svc-${reference}` },
       });
 
-      return {
-        success:   false,
-        pending:   true,
-        message:   'Transaction is being processed. Re-query after 2 minutes.',
-        orderId,
-        reference,
-      };
+      await this.prisma.vendorTransaction.update({
+        where: { reference },
+        data:  { status: 'FAILED', responsePayload: errorData || errorMsg },
+      });
+
+      throw new BadRequestException(
+        `Vending failed. ₦${totalAmount.toLocaleString()} refunded. Reason: ${errorMsg}`,
+      );
+    }
+  }
+
+  // ─── SYNC RESERVED BALANCE TO INTERNAL WALLET THEN DEBIT ─────────
+  // This solves the core problem — internal wallet may be 0
+  // even though reserved account has funds
+  private async syncAndDebit(
+    userId:     string,
+    wallet:     any,
+    amount:     Prisma.Decimal,
+    reference:  string,
+    vendAmount: number,
+  ) {
+    const internalBalance = Number(wallet.balance);
+
+    // ✅ If internal wallet is less than amount needed — sync from reserved
+    if (internalBalance < amount.toNumber()) {
+      const reservedBalance = await this.getUserReservedBalance(userId);
+      const deficit = amount.toNumber() - internalBalance;
+
+      if (reservedBalance >= deficit) {
+        // Credit internal wallet from reserved balance
+        await this.walletService.credit(
+          userId,
+          new Prisma.Decimal(deficit.toString()),
+          `Sync from reserved account — ₦${deficit}`,
+        );
+        this.logger.log(
+          `Synced ₦${deficit} from reserved to internal wallet for user ${userId}`,
+        );
+      }
     }
 
-    //  DEFINITE FAILURE — refund everything 
-    await this.walletService.credit(
+    // Now debit from internal wallet
+    await this.walletService.debitWithIdempotency(
       userId,
-      totalDecimal,
-      `Refund — electricity purchase failed (${orderId}) including service charge`,
-    );
-
-    // Remove revenue entry since vend failed
-    await this.prisma.revenueEntry.deleteMany({
-      where: { reference: `svc-${reference}` },
-    });
-
-    await this.prisma.vendorTransaction.update({
-      where: { reference },
-      data:  { status: 'FAILED', responsePayload: errorData || errorMsg },
-    });
-
-    throw new BadRequestException(
-      `Vending failed. ₦${totalAmount.toLocaleString()} (including ₦${SERVICE_CHARGE} service charge) refunded. Reason: ${errorMsg}`,
+      amount,
+      reference,
+      `Electricity ₦${vendAmount.toLocaleString()} + Service charge ₦${this.SERVICE_CHARGE}`,
     );
   }
-}
 
-  //  VEND ELECTRICITY DIRECTLY FOR INVOICE PAYMENTS
+  // ─── VEND ELECTRICITY DIRECTLY (for invoice payments) ────────────
   async vendElectricityDirect(dto: {
     userId:    string;
     meter:     string;
@@ -422,7 +453,7 @@ export class VendingService {
             phone:       dto.phone,
             email:       dto.email || '',
             name:        dto.name  || 'Pay4Light Customer',
-            rtt:         true, // wait for a synchronous vend result instead of a 202 + webhook
+            rtt:         true,
           },
           { headers: this.headers, timeout: 60000 },
         ),
@@ -463,30 +494,19 @@ export class VendingService {
     }
   }
 
-  //  VEND TV 
+  // ─── VEND TV 
   async vendTv(userId: string, dto: VendTvDto) {
     const orderId   = randomUUID();
     const amount    = new Prisma.Decimal(dto.amount.toString());
     const reference = orderId;
 
-    // CHECK BUYPOWER MFB RESERVED ACCOUNT BALANCE
-    try {
-      const balanceResponse = await this.buypowerMfb.getReservedAccountBalance(userId);
-      const reservedBalance = balanceResponse?.data?.balance ?? balanceResponse?.balance ?? 0;
-
-      if (Number(reservedBalance) < dto.amount) {
-        throw new BadRequestException(
-          `Insufficient balance in your reserved account. You have ₦${Number(reservedBalance).toLocaleString()} but need ₦${dto.amount.toLocaleString()}. ` +
-          `Please fund your account and try again.`,
-        );
-      }
-    } catch (error) {
-      if (error instanceof BadRequestException) throw error;
-      this.logger.error('Failed to check reserved account balance:', error);
-      throw new BadRequestException('Failed to verify account balance. Please try again.');
+    const reservedBalance = await this.getUserReservedBalance(userId);
+    if (reservedBalance < dto.amount) {
+      throw new BadRequestException(
+        `Insufficient balance. You have ₦${reservedBalance.toLocaleString()} but need ₦${dto.amount.toLocaleString()}.`,
+      );
     }
 
-    //  Also check internal wallet for transaction tracking
     const userWallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!userWallet) throw new BadRequestException('Wallet not found');
     if (userWallet.locked) throw new BadRequestException('Wallet is locked');
@@ -509,10 +529,7 @@ export class VendingService {
       },
     });
 
-    await this.walletService.debitWithIdempotency(
-      userId, amount, reference,
-      `TV subscription — ${dto.disco} decoder ${dto.meter}`,
-    );
+    await this.syncAndDebit(userId, userWallet, amount, reference, dto.amount);
 
     try {
       const response = await firstValueFrom(
@@ -541,7 +558,6 @@ export class VendingService {
           where: { reference },
           data:  { status: 'SUCCESS', responsePayload: data },
         });
-
         return {
           success: true,
           message: 'TV subscription successful',
@@ -561,46 +577,29 @@ export class VendingService {
       const axiosError = error as any;
       const errorMsg   = axiosError?.response?.data?.message || axiosError?.message || 'TV vending failed';
 
-      await this.walletService.credit(
-        userId, amount,
-        `Refund — TV subscription failed (${orderId})`,
-      );
-
+      await this.walletService.credit(userId, amount, `Refund — TV subscription failed (${orderId})`);
       await this.prisma.vendorTransaction.update({
         where: { reference },
         data:  { status: 'FAILED', responsePayload: errorMsg },
       });
 
-      throw new BadRequestException(
-        `TV vending failed. Wallet refunded. Reason: ${errorMsg}`,
-      );
+      throw new BadRequestException(`TV vending failed. Wallet refunded. Reason: ${errorMsg}`);
     }
   }
 
-  //  VEND DATA 
+  // ─── VEND DATA 
   async vendData(userId: string, dto: VendDataDto) {
     const orderId   = randomUUID();
     const amount    = new Prisma.Decimal(dto.amount.toString());
     const reference = orderId;
 
-    // CHECK BUYPOWER MFB RESERVED ACCOUNT BALANCE
-    try {
-      const balanceResponse = await this.buypowerMfb.getReservedAccountBalance(userId);
-      const reservedBalance = balanceResponse?.data?.balance ?? balanceResponse?.balance ?? 0;
-
-      if (Number(reservedBalance) < dto.amount) {
-        throw new BadRequestException(
-          `Insufficient balance in your reserved account. You have ₦${Number(reservedBalance).toLocaleString()} but need ₦${dto.amount.toLocaleString()}. ` +
-          `Please fund your account and try again.`,
-        );
-      }
-    } catch (error) {
-      if (error instanceof BadRequestException) throw error;
-      this.logger.error('Failed to check reserved account balance:', error);
-      throw new BadRequestException('Failed to verify account balance. Please try again.');
+    const reservedBalance = await this.getUserReservedBalance(userId);
+    if (reservedBalance < dto.amount) {
+      throw new BadRequestException(
+        `Insufficient balance. You have ₦${reservedBalance.toLocaleString()} but need ₦${dto.amount.toLocaleString()}.`,
+      );
     }
 
-    //  Also check internal wallet for transaction tracking
     const userWallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!userWallet) throw new BadRequestException('Wallet not found');
     if (userWallet.locked) throw new BadRequestException('Wallet is locked');
@@ -623,10 +622,7 @@ export class VendingService {
       },
     });
 
-    await this.walletService.debitWithIdempotency(
-      userId, amount, reference,
-      `Data purchase — ${dto.disco} for ${dto.meter}`,
-    );
+    await this.syncAndDebit(userId, userWallet, amount, reference, dto.amount);
 
     try {
       const response = await firstValueFrom(
@@ -655,7 +651,6 @@ export class VendingService {
           where: { reference },
           data:  { status: 'SUCCESS', responsePayload: data },
         });
-
         return {
           success: true,
           message: 'Data purchase successful',
@@ -676,23 +671,17 @@ export class VendingService {
       const axiosError = error as any;
       const errorMsg   = axiosError?.response?.data?.message || axiosError?.message || 'Data vending failed';
 
-      await this.walletService.credit(
-        userId, amount,
-        `Refund — data purchase failed (${orderId})`,
-      );
-
+      await this.walletService.credit(userId, amount, `Refund — data purchase failed (${orderId})`);
       await this.prisma.vendorTransaction.update({
         where: { reference },
         data:  { status: 'FAILED', responsePayload: errorMsg },
       });
 
-      throw new BadRequestException(
-        `Data vending failed. Wallet refunded. Reason: ${errorMsg}`,
-      );
+      throw new BadRequestException(`Data vending failed. Wallet refunded. Reason: ${errorMsg}`);
     }
   }
 
-  //  RE-QUERY — uses the single documented BuyPower requery endpoint
+  // ─── RE-QUERY 
   async reQuery(orderId: string) {
     const url = `${this.baseUrl}/v2/vend?orderId=${orderId}&getLastResponse=true`;
 
@@ -700,10 +689,7 @@ export class VendingService {
       this.logger.log(`ReQuery GET ${url}`);
 
       const response = await firstValueFrom(
-        this.httpService.get(
-          url,
-          { headers: this.headers },
-        ),
+        this.httpService.get(url, { headers: this.headers }),
       );
 
       const data     = response.data?.result ?? response.data;
@@ -731,29 +717,18 @@ export class VendingService {
 
     } catch (error) {
       const axiosError = error as any;
-      const message = axiosError?.response?.data?.message || axiosError?.message;
-
-      this.logger.error(`ReQuery failed for ${orderId}: ${message}`);
-
-      return {
-        success: false,
-        pending: true,
-        data:    null,
-        error:   message,
-      };
+      this.logger.error(`ReQuery failed for ${orderId}:`, axiosError?.message);
+      return { success: false, pending: true, data: null };
     }
   }
 
-  //  GET PRICE LIST 
+  // ─── GET PRICE LIST 
   async getPriceList(vertical: string, disco?: string) {
     try {
       const response = await firstValueFrom(
         this.httpService.get(
           `${this.baseUrl}/v2/prices`,
-          {
-            headers: this.headers,
-            params:  { vertical, ...(disco ? { disco } : {}) },
-          },
+          { headers: this.headers, params: { vertical, ...(disco ? { disco } : {}) } },
         ),
       );
       return response.data;

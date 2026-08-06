@@ -140,6 +140,11 @@ async syncWallet(@Req() req: any) {
   };
 }
 
+@Post('admin/backfill-reserved-refs')
+async backfillRefs(@Req() req:any){
+return this.walletService.backfillReservedAccountRefs();
+}
+
   
   // POST /wallet/debit
  

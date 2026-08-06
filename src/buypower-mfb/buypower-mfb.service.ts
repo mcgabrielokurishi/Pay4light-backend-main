@@ -61,7 +61,6 @@ export class BuypowerMfbService {
 
       this.logger.log(`Reserved account created: ${JSON.stringify(response.data)}`);
       return response.data;
-
     } catch (error) {
       const axiosError = error as any;
       this.logger.error('Create reserved account failed:', axiosError?.response?.data);
