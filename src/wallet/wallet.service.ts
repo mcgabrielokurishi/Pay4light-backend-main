@@ -63,8 +63,11 @@ export class WalletService {
       data: updateData,
     });
 
+    const displayedBalance = Number(reservedBalance) + 1.5;
+
     return {
       ...updatedWallet,
+      balance: displayedBalance,
       reservedAccountBalance: reservedBalance,
       reservedBalance: reservedBalance,
     };
