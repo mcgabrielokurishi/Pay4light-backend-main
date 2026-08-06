@@ -7,6 +7,13 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 
+interface BuyPowerReservedAccountResponse {
+  accountNumber: string | null;
+  bankName: string;
+  exchangeRef: string | null;
+  raw: any;
+}
+
 @Injectable()
 export class BuypowerMfbService {
   private readonly logger   = new Logger(BuypowerMfbService.name);
@@ -34,14 +41,44 @@ export class BuypowerMfbService {
     return d.toISOString();
   }
 
-  //  CREATE RESERVED ACCOUNT (permanent per user) 
- async createReservedAccount(data: {
+  private normalizeReservedAccountResponse(responseData: any): BuyPowerReservedAccountResponse {
+    const payload = responseData?.data ?? responseData ?? {};
+
+    const accountNumber =
+      payload?.nuban ||
+      payload?.accountNumber ||
+      payload?.account_number ||
+      null;
+
+    const bankName =
+      payload?.bankName ||
+      payload?.bank_name ||
+      payload?.bank ||
+      'BuyPower MFB';
+
+    const exchangeRef =
+      payload?.exchangeRef ||
+      payload?.accountReference ||
+      payload?.reference ||
+      payload?.id ||
+      null;
+
+    return {
+      accountNumber,
+      bankName,
+      exchangeRef,
+      raw: payload,
+    };
+  }
+
+  //  CREATE RESERVED ACCOUNT (permanent per user)
+  async createReservedAccount(data: {
     reference:   string;
     name:        string;
     description: string;
     nin?:        string;
     bvn?:        string;
-  }) {
+  }): Promise<BuyPowerReservedAccountResponse> {
     try {
       this.logger.log(`Creating reserved account — ref: ${data.reference}`);
 
@@ -60,7 +97,7 @@ export class BuypowerMfbService {
       );
 
       this.logger.log(`Reserved account created: ${JSON.stringify(response.data)}`);
-      return response.data;
+      return this.normalizeReservedAccountResponse(response.data);
     } catch (error) {
       const axiosError = error as any;
       this.logger.error('Create reserved account failed:', axiosError?.response?.data);

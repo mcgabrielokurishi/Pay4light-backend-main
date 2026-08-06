@@ -268,18 +268,9 @@ export class WalletService {
 
     this.logger.log('BuyPower MFB reserved account result:', JSON.stringify(result));
 
-    // ✅ BuyPower MFB returns nuban
-    const accountNumber =
-      result?.data?.nuban        ||
-      result?.data?.accountNumber ||
-      result?.nuban               ||
-      result?.accountNumber       ||
-      null;
-
-    const bankName =
-      result?.data?.bankName ||
-      result?.bankName       ||
-      'BuyPower MFB';
+    const accountNumber = result.accountNumber;
+    const bankName     = result.bankName;
+    const exchangeRef  = result.exchangeRef || user.id;
 
     if (!accountNumber) {
       this.logger.error('No account number in BuyPower MFB response:', result);
@@ -294,7 +285,7 @@ export class WalletService {
       data: {
         virtualAccountNuban:  accountNumber,
         virtual_account_bank: bankName,
-        virtual_account_ref:  user.id,
+        virtual_account_ref:  exchangeRef,
       },
     });
 
