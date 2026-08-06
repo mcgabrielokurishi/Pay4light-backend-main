@@ -51,7 +51,7 @@ export class WalletService {
         const balanceResponse = await this.buypowermfb.getReservedAccountBalance(
           wallet.virtual_account_ref || userId,
         );
-        reservedBalance = balanceResponse?.data?.balance ?? balanceResponse?.balance ?? 0;
+        reservedBalance = balanceResponse?.balance ?? 0;
       } catch (error) {
         this.logger.warn(`Could not fetch reserved account balance for user ${userId}`, error);
       }
@@ -60,6 +60,7 @@ export class WalletService {
     return {
       ...wallet,
       reservedAccountBalance: reservedBalance,
+      reservedBalance: reservedBalance,
     };
   }
   

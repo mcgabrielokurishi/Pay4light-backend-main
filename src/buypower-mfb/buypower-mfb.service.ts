@@ -107,6 +107,19 @@ export class BuypowerMfbService {
     }
   }
 
+  private normalizeReservedBalanceResponse(responseData: any) {
+    const payload = responseData?.data ?? responseData ?? {};
+    const balance =
+      Number(payload?.balance) ||
+      Number(responseData?.balance) ||
+      0;
+
+    return {
+      balance,
+      raw: responseData,
+    };
+  }
+
   //  CREATE INVOICE ACCOUNT (one-time per vend) ─
   async createInvoiceAccount(data: {
     reference:   string;
@@ -176,7 +189,7 @@ async getReservedAccountBalance(exchangeRef: string) {
     );
 
     this.logger.log(`Balance for ${exchangeRef}: ${JSON.stringify(response.data)}`);
-    return response.data;
+    return this.normalizeReservedBalanceResponse(response.data);
 
   } catch (error) {
     const axiosError = error as any;
