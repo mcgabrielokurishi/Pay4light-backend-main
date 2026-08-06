@@ -300,6 +300,7 @@ model Wallet {
   virtual_account_bank String?
   virtual_account_meta String?
   virtual_account_ref  String?
+  reservedAccountBalance Float        @default(0)
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
   entries              LedgerEntry[]

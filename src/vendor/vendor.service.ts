@@ -108,11 +108,12 @@ export class VendingService {
   private async getUserReservedBalance(userId: string): Promise<number> {
     try {
       const balanceResponse = await this.buypowerMfb.getReservedAccountBalance(userId);
-      const balance = balanceResponse?.data?.balance ?? balanceResponse?.balance ?? 0;
+      const balance = balanceResponse?.balance ?? 0;
       this.logger.log(`User ${userId} reserved balance: ₦${balance}`);
       return Number(balance);
     } catch (error) {
-      this.logger.error(`Failed to get reserved balance for ${userId}:`, error.message);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to get reserved balance for ${userId}:`, message);
       return -1; // signal failure
     }
   }
@@ -485,10 +486,11 @@ export class VendingService {
 
     } catch (error) {
       const axiosError = error as any;
-      this.logger.error('vendElectricityDirect failed:', axiosError?.response?.data || error.message);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('vendElectricityDirect failed:', axiosError?.response?.data || message);
       throw new BadRequestException(
         axiosError?.response?.data?.message ||
-        error.message ||
+        message ||
         'Vending failed',
       );
     }

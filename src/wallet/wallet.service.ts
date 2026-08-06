@@ -45,7 +45,7 @@ export class WalletService {
     if (!wallet) throw new BadRequestException("Wallet not found");
     
     // Also fetch reserved account balance if account is provisioned
-    let reservedBalance = null;
+    let reservedBalance: number = 0;
     if (wallet.virtualAccountNuban) {
       try {
         const balanceResponse = await this.buypowermfb.getReservedAccountBalance(
@@ -56,9 +56,15 @@ export class WalletService {
         this.logger.warn(`Could not fetch reserved account balance for user ${userId}`, error);
       }
     }
-    
+
+    const updateData: any = { reservedAccountBalance: reservedBalance };
+    const updatedWallet = await this.prisma.wallet.update({
+      where: { userId },
+      data: updateData,
+    });
+
     return {
-      ...wallet,
+      ...updatedWallet,
       reservedAccountBalance: reservedBalance,
       reservedBalance: reservedBalance,
     };
@@ -144,6 +150,12 @@ export class WalletService {
       const balanceResponse = await this.buypowermfb.getReservedAccountBalance(
         wallet.virtual_account_ref || userId,
       );
+
+      const updateData: any = { reservedAccountBalance: balanceResponse.balance ?? 0 };
+      await this.prisma.wallet.update({
+        where: { userId },
+        data: updateData,
+      });
 
       return balanceResponse;
     } catch (error) {
